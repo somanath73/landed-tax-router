@@ -1,0 +1,20 @@
+# Netlify build config (used when you deploy from a Git repo).
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Live tax-rate proxy → serverless function (keeps the TaxJar key server-side). Must precede the SPA catch-all.
+[[redirects]]
+  from = "/api/taxrate"
+  to = "/.netlify/functions/taxrate"
+  status = 200
+
+# Single-page app fallback. Real files (assets, /manifest.webmanifest, /icon.svg) are served
+# first; only unknown paths fall through to index.html.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

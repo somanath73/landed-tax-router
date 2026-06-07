@@ -1,0 +1,14 @@
+{
+  "name": "Landed — tax router",
+  "short_name": "Landed",
+  "description": "The cheapest realistic way to get the same item, factoring sales tax by ZIP or city.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#F4F0E6",
+  "theme_color": "#F4F0E6",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

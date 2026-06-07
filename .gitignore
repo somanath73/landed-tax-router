@@ -1,0 +1,14 @@
+node_modules
+dist
+.DS_Store
+*.log
+.env
+.env.local
+.vercel
+.netlify
+
+# County-rate pipeline inputs/cache (regenerable via scripts/*.mjs; the outputs live in public/)
+scripts/us-counties-raw.json
+scripts/US.zip
+scripts/geonames/
+scripts/county-zips.json
