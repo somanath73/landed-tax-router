@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import US_STATES from "./us-states.geo.json";
 import FL_COUNTIES from "./fl-counties.geo.json";
+const BASE = import.meta.env.BASE_URL; // "/" locally & on Netlify; "/landed-tax-router/" on GitHub Pages — keeps data fetches correct under a subpath
 
 /* =========================================================================
    DATA LAYER
@@ -230,7 +231,7 @@ function cachedRate(zip) {
 async function proxyLookup(f, zip) {
   const hit = cachedRate(zip);
   if (hit) return { sr: hit.sr, lo: hit.lo, city: hit.city };
-  const res = await f(`/api/taxrate?zip=${encodeURIComponent(zip)}`);
+  const res = await f(`${BASE}api/taxrate?zip=${encodeURIComponent(zip)}`);
   if (!res || !res.ok) throw new Error("proxy " + (res && res.status));
   const { rate } = await res.json();
   const lo = (+rate.county_rate || 0) + (+rate.city_rate || 0) + (+rate.special_rate || 0) + (+rate.combined_district_rate || 0);
@@ -336,7 +337,7 @@ async function reverseZip(lat, lng) {
 // US place autocomplete index (city, state, ZIP, coords), lazy-loaded once on first focus of the home input.
 let _placesPromise = null;
 function loadPlaces() {
-  if (!_placesPromise) _placesPromise = fetch("/us-places.json")
+  if (!_placesPromise) _placesPromise = fetch(BASE + "us-places.json")
     .then((r) => (r.ok ? r.json() : []))
     .then((a) => a.map(([name, st, zip, lat, lng]) => ({ name, st, zip, lat, lng })))
     .catch(() => []);
@@ -1184,8 +1185,8 @@ let _countyDataPromise = null;
 function loadCountyData() {
   if (!_countyDataPromise) {
     _countyDataPromise = Promise.all([
-      fetch("/us-counties.geo.json").then((r) => r.json()),
-      fetch("/county-rates.json").then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
+      fetch(BASE + "us-counties.geo.json").then((r) => r.json()),
+      fetch(BASE + "county-rates.json").then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
     ]).then(([geo, rates]) => ({ geo, rates })).catch(() => ({ geo: { features: [] }, rates: {} }));
   }
   return _countyDataPromise;

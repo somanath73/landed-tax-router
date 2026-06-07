@@ -29,6 +29,7 @@ function taxProxy(key) {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), ""); // "" = load all vars (incl. non-VITE_) for server-side use
   return {
+    base: process.env.BASE_PATH || "/", // "/" for local/Netlify; set to "/landed-tax-router/" for GitHub Pages
     plugins: [react(), taxProxy(env.TAXJAR_API_KEY)],
     server: { port: 5173, open: false },
   };
