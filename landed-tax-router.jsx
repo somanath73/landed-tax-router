@@ -344,6 +344,35 @@ function loadPlaces() {
   return _placesPromise;
 }
 
+// Tween a number toward its target with rAF (ease-out cubic) so the verdict figure visibly reacts to input
+// changes. Starts at the target on mount (no entrance tween — the CSS pop covers that). Honors reduced motion.
+function useCountUp(target, dur = 600) {
+  const [val, setVal] = useState(target);
+  const fromRef = useRef(target), rafRef = useRef(0);
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) { fromRef.current = target; setVal(target); return; }
+    const from = fromRef.current; fromRef.current = target;
+    if (from === target) return;
+    const t0 = performance.now();
+    cancelAnimationFrame(rafRef.current);
+    const tick = (t) => {
+      const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+      setVal(from + (target - from) * e);
+      if (p < 1) rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [target, dur]);
+  return val;
+}
+
+// One-tap example scenarios — each tells a story that demos a different verdict (drive-wins, category exemption, ship-wins).
+const SCENARIOS = [
+  { id: "laptop", e: "💻", l: "$1,800 laptop in Boston", sub: "Tax-free NH is a short drive", price: 1800, cat: "general", zip: "02108" },
+  { id: "sneakers", e: "👟", l: "$140 sneakers in Philly", sub: "Clothing is tax-exempt in PA", price: 140, cat: "clothing", zip: "19103" },
+  { id: "tv", e: "📺", l: "$1,500 TV in St. Pete", sub: "Sometimes shipping just wins", price: 1500, cat: "general", zip: "33701" },
+];
+
 export default function Landed() {
   // home holds the provider-resolved geo + rate together; first paint uses the offline data synchronously.
   const [home, setHome] = useState(() => { const g = resolveZip("33701"); return { geo: g, rate: withSource(rateFor(g), "offline") }; });
@@ -371,6 +400,11 @@ export default function Landed() {
   const [tab, setTab] = useState("router"); // top-level tab: "router" | "map"
   const [sug, setSug] = useState([]); const [showSug, setShowSug] = useState(false); const [sugIdx, setSugIdx] = useState(-1);
   const placesRef = useRef(null);
+  const [advOpen, setAdvOpen] = useState(() => { try { return localStorage.getItem("ld:adv") === "1"; } catch { return false; } });
+  const toggleAdv = () => setAdvOpen((v) => { try { localStorage.setItem("ld:adv", v ? "0" : "1"); } catch {} return !v; });
+  const heroRef = useRef(null);
+  const [heroGone, setHeroGone] = useState(false);
+  function runScenario(s) { setPrice(s.price); setCategoryId(s.cat); setFreeShip(true); setZipInput(s.zip); locate(s.zip); }
 
   const category = useMemo(() => CATEGORIES.find((c) => c.id === categoryId) || CATEGORIES[0], [categoryId]);
 
@@ -558,6 +592,16 @@ export default function Landed() {
   const noAlt = !bestAlt;
   const headline = reroute || belowBar ? savings : homeBest ? bestAlt.landed - homeOpt.landed : 0;
   const tone = belowBar ? "hold" : "go";
+  const animHeadline = useCountUp(headline);
+  const animSavings = useCountUp(savings);
+  // Show the floating mini-verdict (mobile) once the hero scrolls out of view; re-observe when the hero remounts.
+  useEffect(() => {
+    const el = heroRef.current;
+    if (!el || !("IntersectionObserver" in window) || tab !== "router") { setHeroGone(false); return; }
+    const io = new IntersectionObserver(([e]) => setHeroGone(!e.isIntersecting), { threshold: 0 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [tab, tone, reroute]);
 
   return (
     <div className="ld-root">
@@ -619,7 +663,6 @@ export default function Landed() {
           .pickrow input,.taxcalc .cin input{font-size:16px;}
           .upchip button{padding:4px 6px;margin:-4px -2px -4px 0;}
           .panel,.taxc{padding:16px;}
-          .verdict{padding:20px 18px 18px;}
         }
         .panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 1px 2px #00000008,0 18px 40px -28px #00000045;}
         .panel h3{font-family:'Archivo',sans-serif;font-weight:600;font-size:17px;margin:0 0 14px;letter-spacing:-.01em;}
@@ -644,19 +687,6 @@ export default function Landed() {
         .chiplist{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
         .upchip{font-size:11.5px;font-weight:600;padding:5px 9px;border-radius:6px;background:#00000007;border:1px solid var(--line);display:flex;gap:6px;align-items:center;}
         .upchip button{cursor:pointer;color:var(--stay);font-weight:700;border:none;background:none;padding:0;font:inherit;line-height:1;}
-        .verdict{border-radius:18px;padding:24px 24px 22px;margin-bottom:14px;border:1.5px solid;position:relative;overflow:hidden;}
-        .verdict[data-tone="go"]{background:linear-gradient(158deg,#0e6b4e1f,#0e6b4e08 58%,var(--card));border-color:#0e6b4e55;box-shadow:0 22px 46px -30px #0e6b4e85;}
-        .verdict[data-tone="hold"]{background:linear-gradient(158deg,#b98a2e24,#b98a2e0a 58%,var(--card));border-color:#b98a2e66;box-shadow:0 22px 46px -30px #b98a2e85;}
-        .vstatus{font-family:'Archivo',sans-serif;font-size:clamp(24px,5vw,36px);font-weight:600;line-height:1.02;letter-spacing:-.02em;margin:4px 0 10px;}
-        .verdict[data-tone="go"] .vstatus,.verdict[data-tone="go"] .vbig{color:var(--go);}
-        .verdict[data-tone="hold"] .vstatus,.verdict[data-tone="hold"] .vbig{color:var(--gold);}
-        .vbig{font-family:'IBM Plex Mono';font-size:clamp(30px,7vw,48px);font-weight:600;line-height:1;letter-spacing:-.02em;}
-        .vrow{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:10px;}
-        .vsub{font-size:13.5px;color:var(--ink);line-height:1.5;opacity:.85;}.vsub b{font-weight:700;}
-        .vbreak{font-family:'IBM Plex Mono';font-size:12px;font-weight:500;color:var(--go);margin:2px 0 8px;letter-spacing:-.01em;}
-        .bd{border-top:1px solid var(--line);margin-top:12px;padding-top:8px;}
-        .bd-row{display:flex;justify-content:space-between;gap:12px;font-family:'IBM Plex Mono';font-size:12px;padding:2.5px 0;color:var(--sub);font-variant-numeric:tabular-nums;}
-        .bd-net{border-top:1px solid var(--line);margin-top:5px;padding-top:7px;font-size:13.5px;color:var(--ink);font-weight:700;}
         .taxc{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 20px;margin-bottom:14px;box-shadow:0 1px 2px #00000008,0 16px 36px -28px #00000040;}
         .taxc h4{font-family:'Archivo',sans-serif;font-size:15px;font-weight:600;margin:0 0 13px;color:var(--ink);letter-spacing:-.01em;}
         .taxrow{display:flex;align-items:center;gap:11px;margin:9px 0;}
@@ -787,26 +817,110 @@ export default function Landed() {
         .rm-flwrap{margin-top:12px;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:8px;}
         .rm-flsvg{width:100%;height:auto;display:block;max-height:360px;}
         .rm-crow[data-on=true]{background:var(--go-soft);color:var(--ink);border-radius:4px;}
+        /* ---- v3 · first-look clarity & polish ---- */
+        .ld-brand{font-family:'Fraunces',serif;font-weight:600;letter-spacing:-.015em;}
+        .ld-h1{font-family:'Fraunces',serif;font-weight:600;font-size:clamp(26px,5.4vw,44px);line-height:1.05;letter-spacing:-.02em;margin:6px 0 10px;max-width:780px;color:var(--ink);}
+        .ld-h1 em{font-style:italic;background:linear-gradient(92deg,var(--go),#2f7fd6);-webkit-background-clip:text;background-clip:text;color:transparent;}
+        .ld-hello{margin-bottom:4px;}
+        .steptag{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--go);}
+        .steptag i{font-style:normal;width:19px;height:19px;border-radius:50%;background:var(--go);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-family:'IBM Plex Mono';flex:none;}
+        .steptag-w{color:#fff;}
+        .steptag-w i{background:rgba(255,255,255,.28);}
+        .scen{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;margin:2px 0 16px;padding:4px 2px;}
+        .scen::-webkit-scrollbar{display:none;}
+        .scen-lab{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--sub);flex:none;}
+        .scen-chip{display:inline-flex;align-items:center;gap:9px;flex:none;min-height:48px;padding:8px 14px 8px 10px;border:1.5px solid var(--line);border-radius:12px;background:var(--card);cursor:pointer;text-align:left;font:inherit;box-shadow:0 1px 2px #00000008;}
+        .scen-chip:hover{border-color:var(--go);transform:translateY(-1px);box-shadow:0 8px 18px -10px #0e9f6e66;}
+        .scen-chip:active{transform:scale(.98);}
+        .scen-e{font-size:20px;}
+        .scen-t{display:flex;flex-direction:column;line-height:1.25;}
+        .scen-t b{font-size:13px;font-weight:700;color:var(--ink);}
+        .scen-t small{font-size:11px;color:var(--sub);font-weight:600;}
+        .ld-tabs{display:inline-flex;gap:4px;background:linear-gradient(180deg,#1d2936,var(--ink));border-radius:999px;padding:4px;box-shadow:0 12px 26px -14px #16202b99,inset 0 1px 0 #ffffff14;}
+        .ld-tab{border:none;background:transparent;color:#94A3B8;min-height:44px;box-shadow:none;font-size:13.5px;}
+        .ld-tab[data-on=true]{background:#fff;color:var(--ink);border:none;box-shadow:0 4px 12px -4px #00000066;}
+        @media (hover:hover){.ld-tab:not([data-on=true]):hover{color:#fff;}}
+        .geobar{background:rgba(255,255,255,.78);backdrop-filter:blur(12px) saturate(1.5);-webkit-backdrop-filter:blur(12px) saturate(1.5);border-color:#ffffffcc;}
+        @supports not (backdrop-filter:blur(1px)){.geobar{background:var(--card);}}
+        @media (min-width:761px){.geobar{position:sticky;top:10px;}}
+        .zipin:focus{box-shadow:0 0 0 3px var(--go-soft),0 8px 20px -10px #0e9f6e55;}
+        .hero[data-tone="go"]{background:radial-gradient(120% 140% at 85% -20%,#ffffff2e,transparent 50%),linear-gradient(118deg,#0e9f6e 0%,#0c9090 52%,#2f7fd6 100%);}
+        .hero[data-tone="hold"]{background:radial-gradient(120% 140% at 85% -20%,#ffffff22,transparent 50%),linear-gradient(118deg,#243244 0%,#33506b 58%,#3b6fa0 100%);}
+        .hero::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.16;mix-blend-mode:overlay;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");}
+        .hero::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(105deg,transparent 42%,#ffffff2b 50%,transparent 58%);transform:translateX(-130%);animation:sheen 1.1s .55s ease-out forwards;}
+        @keyframes sheen{to{transform:translateX(130%)}}
+        .hero-kick{display:flex;align-items:center;gap:8px;}
+        .hero-huge{font-variant-numeric:tabular-nums;animation:vpop .55s .28s cubic-bezier(.2,.7,.2,1) both;}
+        .hero-word{font-family:'Fraunces',serif;font-weight:650;}
+        @keyframes vpop{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
+        @keyframes pop{0%{transform:scale(.85);opacity:.4}100%{transform:scale(1);opacity:1}}
+        .hero-pill{animation:pop .35s .2s cubic-bezier(.2,.7,.2,1) both;}
+        .hero-summary{background:rgba(255,255,255,.72);backdrop-filter:blur(14px) saturate(1.5);-webkit-backdrop-filter:blur(14px) saturate(1.5);border:1px solid rgba(255,255,255,.6);}
+        @supports not (backdrop-filter:blur(1px)){.hero-summary{background:rgba(255,255,255,.96);}}
+        .adv-tog{display:flex;align-items:center;gap:8px;width:100%;min-height:44px;margin:2px 0 4px;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;background:#00000004;font:inherit;cursor:pointer;color:var(--ink);}
+        .adv-tog:hover{border-color:var(--sub);}
+        .adv-name{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--sub);}
+        .adv-sum{margin-left:auto;font-size:11.5px;color:var(--ink);}
+        .adv-car{color:var(--sub);transition:transform .25s ease;}
+        .adv-car[data-open=true]{transform:rotate(180deg);}
+        .adv-body{display:grid;grid-template-rows:0fr;transition:grid-template-rows .3s cubic-bezier(.2,.7,.2,1);}
+        .adv-body[data-open=true]{grid-template-rows:1fr;}
+        .adv-body>div{overflow:hidden;min-height:0;}
+        .adv-body[data-open=true]>div{padding-top:6px;}
+        .cmp-fill{position:relative;overflow:hidden;}
+        .cmp-fill[data-best=true]::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,#ffffff5e,transparent);transform:translateX(-100%);animation:shimmer 2.2s 1s cubic-bezier(.4,0,.2,1) 2;}
+        @keyframes shimmer{to{transform:translateX(100%)}}
+        @media (hover:hover){
+          .stat,.cmp,.map-card{transition:transform .22s cubic-bezier(.2,.7,.2,1),box-shadow .22s ease;}
+          .stat:hover{transform:translateY(-2px);box-shadow:0 2px 4px #00000010,0 18px 36px -22px #16202b40;}
+          .cmp:hover,.map-card:hover{box-shadow:0 2px 4px #0000000d,0 26px 52px -30px #16202b4d;}
+        }
+        @keyframes valflash{0%{background:var(--go-soft);color:var(--go);}100%{background:transparent;}}
+        .vf{animation:valflash .6s ease;border-radius:4px;padding:0 4px;margin:0 -4px;}
+        .mini-v{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 14px);z-index:90;display:none;align-items:center;gap:10px;min-height:48px;padding:10px 20px;border:none;border-radius:999px;cursor:pointer;color:#fff;font:inherit;box-shadow:0 12px 30px -10px #00000080;animation:rise .3s cubic-bezier(.2,.7,.2,1) both;}
+        .mini-v[data-tone="go"]{background:linear-gradient(118deg,#0e9f6e,#0c9090);}
+        .mini-v[data-tone="hold"]{background:linear-gradient(118deg,#243244,#33506b);}
+        .mini-v-act{font-weight:800;font-size:14px;white-space:nowrap;}
+        .mini-v-amt{font-size:13px;opacity:.92;}
+        @media (max-width:760px){.mini-v{display:inline-flex;}}
+        @media (prefers-reduced-motion:reduce){
+          .rise,.hero-huge,.hero-pill,.hero::after,.cmp-fill[data-best=true]::after,.vf,.mini-v{animation:none!important;}
+          .ld-root *{transition-duration:.01ms!important;}
+        }
       `}</style>
 
       <div className="ld-wrap">
         <div className="ld-mast rise">
-          <div><div className="ld-brand">Land<b>ed</b></div><div className="ld-kick">Landed-cost router</div></div>
+          <div><div className="ld-brand">Land<b>ed</b></div><div className="ld-kick">The true cost of buying online</div></div>
           <nav className="ld-tabs" role="tablist" aria-label="Views">
-            <button type="button" role="tab" aria-selected={tab === "router"} data-on={tab === "router"} className="ld-tab" onClick={() => setTab("router")}>Router</button>
-            <button type="button" role="tab" aria-selected={tab === "map"} data-on={tab === "map"} className="ld-tab" onClick={() => setTab("map")}>Tax map</button>
+            <button type="button" role="tab" aria-selected={tab === "router"} data-on={tab === "router"} className="ld-tab" onClick={() => setTab("router")}>Ship or drive?</button>
+            <button type="button" role="tab" aria-selected={tab === "map"} data-on={tab === "map"} className="ld-tab" onClick={() => setTab("map")}>US tax map</button>
           </nav>
         </div>
 
-        <p className="ld-intro rise">{tab === "map"
-          ? <>US sales-tax rates by state — <b>tap any state</b> to drill into its real county rates.</>
-          : <>Buying something online? See whether to <b>ship it home</b> or <b>drive to a cheaper pickup</b> — sales tax, gas, and your time all counted in.</>}</p>
+        {tab === "map" ? (
+          <p className="ld-intro rise">US sales-tax rates by state — <b>tap any state</b> to drill into its real county rates.</p>
+        ) : (
+          <header className="ld-hello rise">
+            <h1 className="ld-h1">Buying online? Ship it home — <em>or drive to where tax is lower?</em></h1>
+            <p className="ld-intro" style={{ margin: "0 0 12px" }}>Landed totals the <b>real cost</b> — price + sales tax + gas + your time — for every pickup spot near you, and names the cheapest move.</p>
+            <div className="scen" role="group" aria-label="Example scenarios">
+              <span className="scen-lab">Try one:</span>
+              {SCENARIOS.map((s) => (
+                <button key={s.id} type="button" className="scen-chip" onClick={() => runScenario(s)}>
+                  <span className="scen-e">{s.e}</span>
+                  <span className="scen-t"><b>{s.l}</b><small>{s.sub}</small></span>
+                </button>
+              ))}
+            </div>
+          </header>
+        )}
 
         {tab === "map" ? (
           <RatesMap />
         ) : (<>
         <div className="geobar rise" style={{ animationDelay: ".05s" }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sub)", textTransform: "uppercase", letterSpacing: ".04em" }}>Home ZIP / city</span>
+          <span className="steptag"><i>1</i>Where it's going</span>
           <span className="acwrap">
             <input className="zipin num" value={zipInput} placeholder="ZIP or city" aria-label="Home ZIP or city" autoComplete="off"
               onChange={onZipChange} onKeyDown={onZipKey}
@@ -840,10 +954,10 @@ export default function Landed() {
         <div className="ld-grid">
           {/* CONTROLS */}
           <div className="panel rise" style={{ animationDelay: ".1s" }}>
-            <h3 style={{ marginBottom: 2 }}>Purchase setup</h3>
-            <div style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: 18 }}>Adjust only when needed</div>
+            <h3 style={{ marginBottom: 2, display: "flex", alignItems: "center", gap: 8 }}><span className="steptag"><i>2</i></span>What you're buying</h3>
+            <div style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: 18 }}>The verdict updates live as you adjust</div>
             <div className="fld">
-              <div className="lab"><span>Item price</span><span className="num">{money(price)}</span></div>
+              <div className="lab"><span>Item price</span><span className="num vf" key={price}>{money(price)}</span></div>
               <input type="number" value={price} min={0} step={10} aria-label="Item price in dollars" onChange={(e) => setPrice(Math.max(0, Number(e.target.value) || 0))} />
               <input type="range" min={0} max={8000} step={50} value={Math.min(price, 8000)} aria-label="Item price slider" onChange={(e) => setPrice(Number(e.target.value))} style={{ marginTop: 10 }} />
             </div>
@@ -852,11 +966,18 @@ export default function Landed() {
               <div className="cats">{CATEGORIES.map((c) => <button key={c.id} type="button" className="cat" data-on={categoryId === c.id} aria-pressed={categoryId === c.id} onClick={() => setCategoryId(c.id)}>{c.l}</button>)}</div>
             </div>
             <div className="fld"><button type="button" className="tog" role="switch" aria-checked={freeShip} aria-label="Free shipping" onClick={() => setFreeShip((v) => !v)}><span className="lab" style={{ margin: 0 }}>Free shipping</span><span className="switch" data-on={freeShip}><i /></span></button></div>
-            <div className="fld"><div className="lab"><span>Max distance</span><span className="num">{radius} mi</span></div><input type="range" min={10} max={300} step={10} value={radius} aria-label="Maximum driving distance in miles" onChange={(e) => setRadius(Number(e.target.value))} /></div>
-            <div className="fld"><div className="lab"><span>Cost per mile</span><span className="num">${costPerMile.toFixed(2)}</span></div><input type="range" min={0.1} max={0.8} step={0.05} value={costPerMile} aria-label="Driving cost per mile in dollars" onChange={(e) => setCostPerMile(Number(e.target.value))} /></div>
-            <div className="fld"><div className="lab"><span>Your time</span><span className="num">${timeValue}/hr</span></div><input type="range" min={0} max={80} step={5} value={timeValue} aria-label="Value of your time per hour in dollars" onChange={(e) => setTimeValue(Number(e.target.value))} /></div>
-            <div className="fld"><div className="lab"><span>Min savings to bother</span><span className="num">${minSavings}</span></div><input type="range" min={0} max={100} step={5} value={minSavings} aria-label="Minimum savings worth a trip in dollars" onChange={(e) => setMinSavings(Number(e.target.value))} /></div>
-            <div className="fld"><div className="lab"><span>Pickup fee (locker etc.)</span><span className="num">${pickupFee}</span></div><input type="range" min={0} max={40} step={5} value={pickupFee} aria-label="Pickup fee in dollars" onChange={(e) => setPickupFee(Number(e.target.value))} /></div>
+            <button type="button" className="adv-tog" aria-expanded={advOpen} onClick={toggleAdv}>
+              <span className="adv-name">Trip assumptions</span>
+              <span className="adv-sum num">{radius} mi · ${costPerMile.toFixed(2)}/mi · ${timeValue}/hr</span>
+              <span className="adv-car" data-open={advOpen}>▾</span>
+            </button>
+            <div className="adv-body" data-open={advOpen}><div>
+              <div className="fld"><div className="lab"><span>Max distance</span><span className="num vf" key={radius}>{radius} mi</span></div><input type="range" min={10} max={300} step={10} value={radius} aria-label="Maximum driving distance in miles" onChange={(e) => setRadius(Number(e.target.value))} /></div>
+              <div className="fld"><div className="lab"><span>Cost per mile</span><span className="num vf" key={costPerMile}>${costPerMile.toFixed(2)}</span></div><input type="range" min={0.1} max={0.8} step={0.05} value={costPerMile} aria-label="Driving cost per mile in dollars" onChange={(e) => setCostPerMile(Number(e.target.value))} /></div>
+              <div className="fld"><div className="lab"><span>Your time</span><span className="num vf" key={timeValue}>${timeValue}/hr</span></div><input type="range" min={0} max={80} step={5} value={timeValue} aria-label="Value of your time per hour in dollars" onChange={(e) => setTimeValue(Number(e.target.value))} /></div>
+              <div className="fld"><div className="lab"><span>Min savings to bother</span><span className="num vf" key={minSavings}>${minSavings}</span></div><input type="range" min={0} max={100} step={5} value={minSavings} aria-label="Minimum savings worth a trip in dollars" onChange={(e) => setMinSavings(Number(e.target.value))} /></div>
+              <div className="fld"><div className="lab"><span>Pickup fee (locker etc.)</span><span className="num vf" key={pickupFee}>${pickupFee}</span></div><input type="range" min={0} max={40} step={5} value={pickupFee} aria-label="Pickup fee in dollars" onChange={(e) => setPickupFee(Number(e.target.value))} /></div>
+            </div></div>
             <div className="fld">
               <div className="lab"><span>Add a pickup ZIP / city</span></div>
               <div className="pickrow">
@@ -871,27 +992,27 @@ export default function Landed() {
 
           {/* RESULTS */}
           <div>
-            <div className="hero rise" data-tone={tone} style={{ animationDelay: ".15s" }}>
+            <div className="hero rise" data-tone={tone} key={tone + (reroute ? "-r" : "")} ref={heroRef} style={{ animationDelay: ".15s" }}>
               <div className="hero-main">
-                <div className="hero-kick">{homeFree ? "Already the best price" : noAlt ? "Best price found" : reroute ? "Smart savings found" : belowBar ? "Barely worth it" : "Shipping home wins"}</div>
+                <div className="hero-kick"><span className="steptag steptag-w"><i>3</i></span>{homeFree ? "Verdict · Already the best price" : noAlt ? "Verdict · Best price found" : reroute ? "Verdict · A short drive beats shipping" : belowBar ? "Verdict · Not worth the drive" : "Verdict · Shipping wins"}</div>
                 {homeFree || noAlt ? (
-                  <><div className="hero-label">Best move</div><div className="hero-huge">Ship home</div></>
+                  <><div className="hero-label">Cheapest move</div><div className="hero-huge hero-word">Ship home</div></>
                 ) : reroute ? (
-                  <><div className="hero-label">You save</div><div className="hero-huge">{money(headline)}</div></>
+                  <><div className="hero-label">Pick it up instead and you keep</div><div className="hero-huge num">{money(animHeadline)}</div></>
                 ) : belowBar ? (
-                  <><div className="hero-label">Pickup saves only</div><div className="hero-huge">{money(savings)}</div></>
+                  <><div className="hero-label">A pickup would only save</div><div className="hero-huge num">{money(animSavings)}</div></>
                 ) : (
-                  <><div className="hero-label">A pickup trip would add</div><div className="hero-huge">{money(headline)}</div></>
+                  <><div className="hero-label">Driving to pick it up would cost an extra</div><div className="hero-huge num">{money(animHeadline)}</div></>
                 )}
                 <div className="hero-cta">
-                  <span className="hero-pill">{reroute ? `Pick up · ${bestAlt.name.split(/[,·]/)[0].trim()}` : "Ship home"}</span>
+                  <span className="hero-pill">{reroute ? `→ Drive to ${bestAlt.name.split(/[,·]/)[0].trim()}` : "✓ Ship it home"}</span>
                   <span className="hero-cta-sub"><b>{reroute ? "Best move today" : "Best option today"}</b><br />
                     {homeFree ? `${homeGeo.city} has no sales tax.` : noAlt ? `Nothing within ${radius} mi beats it.` : reroute ? `Set ${bestAlt.name.split(/[,·]/)[0].trim()} as the delivery address.` : belowBar ? `Under your $${minSavings} bar once the drive's counted — ship it home.` : `A ${bestAlt.rtMiles}-mile pickup trip costs more than it saves.`}</span>
                 </div>
               </div>
               {bestAlt && !homeFree && (
                 <div className="hero-summary">
-                  <div className="hs-title">Result summary</div>
+                  <div className="hs-title">Why this wins</div>
                   {reroute || belowBar ? (
                     <>
                       <div className="hs-row"><span>Sales tax</span><b style={{ color: "var(--go)" }}>+{money(gross)}</b></div>
@@ -945,7 +1066,7 @@ export default function Landed() {
                               <span className="cmp-amt">{money(a)}</span>
                               {best && <span className="cmp-best">Best</span>}
                             </div>
-                            <div className="cmp-bar"><div className="cmp-fill" style={{ width: Math.max(4, (a / maxL) * 100) + "%", background: best ? "var(--go)" : "var(--ink)" }} /></div>
+                            <div className="cmp-bar"><div className="cmp-fill" data-best={best} style={{ width: Math.max(4, (a / maxL) * 100) + "%", background: best ? "linear-gradient(90deg,var(--go),#0c9f8e)" : "var(--ink)" }} /></div>
                             <div className="cmp-break"><span>tax {money(r.tax)}</span><span>drive {money(drive)}</span></div>
                           </div>
                         );
@@ -1008,6 +1129,12 @@ export default function Landed() {
             </div>
           </div>
         </div>
+        {heroGone && bestAlt && (
+          <button type="button" className="mini-v" data-tone={tone} onClick={() => heroRef.current && heroRef.current.scrollIntoView({ behavior: "smooth", block: "center" })}>
+            <span className="mini-v-act">{reroute ? `Pick up · ${bestAlt.name.split(/[,·]/)[0].trim()}` : "Ship home"}</span>
+            <span className="mini-v-amt num">{reroute ? "saves " + money(headline) : "best move"}</span>
+          </button>
+        )}
         </>)}
       </div>
     </div>
