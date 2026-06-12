@@ -365,6 +365,17 @@ function useCountUp(target, dur = 600) {
   return val;
 }
 
+// Falling dollar coins for the verdict hero — fixed configs (x position, size px, fall duration s, delay s, spin s, tilt deg).
+const COINS = [
+  { x: "6%", s: 34, d: 9.5, dl: 0, sp: 2.8, t: 8 },
+  { x: "18%", s: 22, d: 12, dl: 2.1, sp: 3.6, t: -12 },
+  { x: "33%", s: 28, d: 10.5, dl: 4.3, sp: 2.2, t: 5 },
+  { x: "52%", s: 20, d: 13, dl: 1.2, sp: 4.1, t: -6 },
+  { x: "66%", s: 30, d: 9, dl: 3.4, sp: 2.6, t: 10 },
+  { x: "81%", s: 24, d: 11.5, dl: 5.6, sp: 3.2, t: -9 },
+  { x: "92%", s: 18, d: 14, dl: 0.8, sp: 3.9, t: 14 },
+];
+
 // One-tap example scenarios — each tells a story that demos a different verdict (drive-wins, category exemption, ship-wins).
 const SCENARIOS = [
   { id: "laptop", e: "💻", l: "$1,800 laptop in Boston", sub: "Tax-free NH is a short drive", price: 1800, cat: "general", zip: "02108" },
@@ -961,6 +972,16 @@ export default function Landed() {
           [data-reveal]:not([data-in]){opacity:0;}
         }
         [data-reveal][data-in]{animation:rise .6s cubic-bezier(.2,.7,.2,1) var(--rvd,0s) both;}
+        .coins{position:absolute;inset:0;pointer-events:none;z-index:0;}
+        .hero-main,.hero-summary,.hero-cta{position:relative;z-index:1;}
+        .coin{position:absolute;top:0;left:var(--cx);width:var(--cs);height:var(--cs);animation:coinfall var(--cd) linear var(--cdel) infinite;will-change:transform;opacity:0;}
+        .coin i{display:flex;align-items:center;justify-content:center;width:100%;height:100%;border-radius:50%;font-style:normal;font-family:'Archivo',sans-serif;font-weight:800;font-size:calc(var(--cs)*.52);color:#7d5e10;
+          background:radial-gradient(circle at 35% 30%,#FFF3C4 0%,#F0CE62 42%,#D2A53A 70%,#9C7A1E 100%);
+          box-shadow:inset 0 0 0 2px #c79b2e,inset 0 0 0 4px #ecd07a,0 6px 12px -5px rgba(0,0,0,.55);
+          animation:coinspin var(--csp) linear infinite;}
+        @keyframes coinfall{0%{transform:translate3d(0,-70px,0);opacity:0}7%{opacity:.85}88%{opacity:.85}100%{transform:translate3d(16px,560px,0);opacity:0}}
+        @keyframes coinspin{from{transform:rotateY(0deg) rotate(var(--ct))}to{transform:rotateY(360deg) rotate(var(--ct))}}
+        @media (max-width:560px){.coin:nth-child(n+5){display:none;}}
         .hero-spot{display:none;}
         @media (hover:hover) and (pointer:fine){
           .hero-spot{display:block;position:absolute;left:0;top:0;width:380px;height:380px;border-radius:50%;pointer-events:none;background:radial-gradient(closest-side,rgba(255,255,255,.34),rgba(160,255,221,.12) 45%,transparent 72%);mix-blend-mode:soft-light;opacity:var(--spot-o,0);transition:opacity .35s ease;transform:translate3d(calc(var(--sx,-999px) - 190px),calc(var(--sy,-999px) - 190px),0);will-change:transform;}
@@ -970,6 +991,7 @@ export default function Landed() {
           .rise,.hero-huge,.hero-pill,.hero::after,.cmp-fill[data-best=true]::after,.vf,.mini-v,.kw-i,[data-reveal],.boot,.boot-mark,.boot-kick{animation:none!important;}
           [data-reveal]{opacity:1!important;}
           .hero-spot{display:none!important;}
+          .coins{display:none!important;}
           .ld-root *{transition-duration:.01ms!important;}
         }
       `}</style>
@@ -1089,6 +1111,11 @@ export default function Landed() {
           <div>
             <div className="hero rise" data-tone={tone} key={tone + (reroute ? "-r" : "")} ref={heroRef} style={{ animationDelay: ".15s" }}
               onPointerEnter={spotEnter} onPointerMove={spotMove} onPointerLeave={spotLeave}>
+              <span className="coins" aria-hidden="true">
+                {COINS.map((c, i) => (
+                  <span key={i} className="coin" style={{ "--cx": c.x, "--cs": c.s + "px", "--cd": c.d + "s", "--cdel": c.dl + "s", "--csp": c.sp + "s", "--ct": c.t + "deg", filter: c.s < 21 ? "blur(1px)" : undefined }}><i>$</i></span>
+                ))}
+              </span>
               <span className="hero-spot" aria-hidden="true" />
               <div className="hero-main">
                 <div className="hero-kick">Verdict</div>
