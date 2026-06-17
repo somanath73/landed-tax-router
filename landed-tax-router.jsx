@@ -377,6 +377,9 @@ const COINS = [
 ];
 
 // One-tap example scenarios — each tells a story that demos a different verdict (drive-wins, category exemption, ship-wins).
+// Google Maps "find stores" search term per purchase category (used for the actionable pickup link).
+const SHOP_Q = { general: "stores", clothing: "clothing store", groceries: "grocery store", rx: "pharmacy" };
+
 const SCENARIOS = [
   { id: "laptop", e: "💻", l: "$1,800 laptop in Boston", sub: "Tax-free NH is a short drive", price: 1800, cat: "general", zip: "02108" },
   { id: "sneakers", e: "👟", l: "$140 sneakers in Philly", sub: "Clothing is tax-exempt in PA", price: 140, cat: "clothing", zip: "19103" },
@@ -803,6 +806,12 @@ export default function Landed() {
         .hs-row b{color:var(--ink);font-weight:700;font-family:'IBM Plex Mono';}
         .hs-net{display:flex;justify-content:space-between;gap:12px;align-items:baseline;border-top:1px solid var(--line);margin-top:7px;padding-top:9px;font-size:14px;font-weight:700;}
         .hs-net b{font-family:'IBM Plex Mono';}
+        .hs-src{font-size:10.5px;letter-spacing:.04em;color:var(--sub);margin-top:9px;}
+        .hero-act{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;}
+        .hero-act-btn{display:inline-flex;align-items:center;gap:6px;font-family:'Archivo',sans-serif;font-size:13px;font-weight:700;padding:10px 16px;border-radius:999px;text-decoration:none;background:rgba(255,255,255,.16);color:#fff;border:1px solid rgba(255,255,255,.30);min-height:40px;}
+        .hero-act-btn:hover{background:rgba(255,255,255,.28);}
+        .hero-act-btn.ghost{background:transparent;}
+        .hero-act-btn.ghost:hover{background:rgba(255,255,255,.14);}
         .cmp{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px 22px;margin-bottom:20px;box-shadow:none;}
         .cmp-head{display:flex;justify-content:space-between;align-items:center;gap:12px;}
         .cmp-head h4{font-weight:700;font-size:18px;margin:0;}
@@ -1131,8 +1140,14 @@ export default function Landed() {
                 <div className="hero-cta">
                   <span className="hero-pill">{reroute ? `→ Drive to ${bestAlt.name.split(/[,·]/)[0].trim()}` : "✓ Ship it home"}</span>
                   <span className="hero-cta-sub"><b>{reroute ? "Best move today" : "Best option today"}</b><br />
-                    {homeFree ? `${homeGeo.city} has no sales tax.` : noAlt ? `Nothing within ${radius} mi beats it.` : reroute ? `Set ${bestAlt.name.split(/[,·]/)[0].trim()} as the delivery address.` : belowBar ? `Under your $${minSavings} bar once the drive's counted — ship it home.` : `A ${bestAlt.rtMiles}-mile pickup trip costs more than it saves.`}</span>
+                    {homeFree ? `${homeGeo.city} has no sales tax.` : noAlt ? `Nothing within ${radius} mi beats it.` : reroute ? `Worth the ${bestAlt.rtMiles}-mile round trip — get there and find a store:` : belowBar ? `Under your $${minSavings} bar once the drive's counted — ship it home.` : `A ${bestAlt.rtMiles}-mile pickup trip costs more than it saves.`}</span>
                 </div>
+                {reroute && bestAlt.lat != null && (
+                  <div className="hero-act">
+                    <a className="hero-act-btn" href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(homeGeo.zip || homeGeo.label || "")}&destination=${bestAlt.lat},${bestAlt.lng}`} target="_blank" rel="noopener noreferrer">Directions ↗</a>
+                    <a className="hero-act-btn ghost" href={`https://www.google.com/maps/search/${encodeURIComponent(SHOP_Q[categoryId] || "stores")}/@${bestAlt.lat},${bestAlt.lng},12z`} target="_blank" rel="noopener noreferrer">Find stores ↗</a>
+                  </div>
+                )}
               </div>
               {bestAlt && !homeFree && (
                 <div className="hero-summary">
@@ -1150,6 +1165,7 @@ export default function Landed() {
                       <div className="hs-net"><span>Net advantage</span><b style={{ color: "var(--go)" }}>+{money(headline)}</b></div>
                     </>
                   )}
+                  <div className="hs-src">{homeRate.source === "api" ? "✓ Live rate · TaxJar" : "Estimated rate"}</div>
                 </div>
               )}
             </div>
