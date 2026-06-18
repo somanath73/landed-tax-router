@@ -379,6 +379,9 @@ const COINS = [
 // One-tap example scenarios — each tells a story that demos a different verdict (drive-wins, category exemption, ship-wins).
 // Google Maps "find stores" search term per purchase category (used for the actionable pickup link).
 const SHOP_Q = { general: "stores", clothing: "clothing store", groceries: "grocery store", rx: "pharmacy" };
+// Neutral Google Shopping seed for the ship-home verdict (aggregator, no retailer/inventory claim). "" = open Shopping with no query.
+// general/rx open Shopping unseeded — a "pharmacy" product search would mislead for prescriptions (you fill those, not "shop" them).
+const SHOP_ONLINE = { general: "", clothing: "clothing", groceries: "groceries", rx: "" };
 
 const SCENARIOS = [
   { id: "laptop", e: "💻", l: "$1,800 laptop in Boston", sub: "Tax-free NH is a short drive", price: 1800, cat: "general", zip: "02108" },
@@ -1142,10 +1145,14 @@ export default function Landed() {
                   <span className="hero-cta-sub"><b>{reroute ? "Best move today" : "Best option today"}</b><br />
                     {homeFree ? `${homeGeo.city} has no sales tax.` : noAlt ? `Nothing within ${radius} mi beats it.` : reroute ? `Worth the ${bestAlt.rtMiles}-mile round trip — get there and find a store:` : belowBar ? `Under your $${minSavings} bar once the drive's counted — ship it home.` : `A ${bestAlt.rtMiles}-mile pickup trip costs more than it saves.`}</span>
                 </div>
-                {reroute && bestAlt.lat != null && (
+                {reroute && bestAlt.lat != null ? (
                   <div className="hero-act">
                     <a className="hero-act-btn" href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(homeGeo.zip || homeGeo.label || "")}&destination=${bestAlt.lat},${bestAlt.lng}`} target="_blank" rel="noopener noreferrer">Directions ↗</a>
                     <a className="hero-act-btn ghost" href={`https://www.google.com/maps/search/${encodeURIComponent(SHOP_Q[categoryId] || "stores")}/@${bestAlt.lat},${bestAlt.lng},12z`} target="_blank" rel="noopener noreferrer">Find stores ↗</a>
+                  </div>
+                ) : (
+                  <div className="hero-act">
+                    <a className="hero-act-btn" href={`https://www.google.com/search?tbm=shop${SHOP_ONLINE[categoryId] ? "&q=" + encodeURIComponent(SHOP_ONLINE[categoryId]) : ""}`} target="_blank" rel="noopener noreferrer">Shop online ↗</a>
                   </div>
                 )}
               </div>
