@@ -1,7 +1,7 @@
 {
-  "name": "Landed — tax router",
-  "short_name": "Landed",
-  "description": "The cheapest realistic way to get the same item, factoring sales tax by ZIP or city.",
+  "name": "Sales Tax Saver",
+  "short_name": "Sales Tax Saver",
+  "description": "Shop in tax-free locations or get it delivered to save — the true cost of buying online by ZIP or city.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

@@ -1442,7 +1442,7 @@ export default function Landed() {
             {userPoints.length > 0 && <div className="chiplist">{userPoints.map((u) => <span key={u.zip || u.label} className="upchip">{u.label}<button type="button" aria-label={"Remove " + u.label} onClick={() => setUserPoints((p) => p.filter((x) => (x.zip || x.label) !== (u.zip || u.label)))}>×</button></span>)}</div>}
           </div>
 
-          <div className="about">Landed · the true cost of buying online — price + sales tax + gas + time.</div>
+          <div className="about">Sales Tax Saver · the true cost of buying online — price + sales tax + gas + time.</div>
         </>)}
 
         </main>
