@@ -695,9 +695,17 @@ export default function Landed() {
   const dirURL = storeAvail ? `https://www.google.com/maps/dir/?api=1&origin=${enc(homeGeo.zip || homeGeo.label || "")}&destination=${bestAlt.lat},${bestAlt.lng}` : null;
   const findStoresURL = storeAvail ? `https://www.google.com/maps/search/${enc(SHOP_Q[categoryId] || "stores")}/@${bestAlt.lat},${bestAlt.lng},12z` : null;
   const shopURL = `https://www.google.com/search?tbm=shop${SHOP_ONLINE[categoryId] ? "&q=" + enc(SHOP_ONLINE[categoryId]) : ""}`;
-  const youCouldSave = Math.max(0, savings);
+  const storeWorthIt = reroute && storeAvail; // driving to a pickup genuinely beats shipping (clears the savings bar)
+  const youCouldSave = storeWorthIt ? Math.max(0, savings) : 0;
   const homeTax = homeOpt.tax;
-  const chosenTax = chosen === "store" && bestAlt ? bestAlt.tax : homeTax;
+  const chosenTax = chosen === "store" && storeWorthIt ? bestAlt.tax : homeTax;
+  const storeNudge = homeFree
+    ? `${homeGeo.city || homeGeo.label} has no sales tax — getting it delivered costs nothing extra.`
+    : noAlt
+    ? `No pickup within ${radius} mi — delivering is your cheapest move here.`
+    : belowBar
+    ? `A pickup saves only ${money(savings)} — under your $${minSavings} bar once gas + time are counted.`
+    : `No nearby pickup beats shipping once gas + time are counted.`;
   const screenTitle = screen === "home" ? "Sales Tax Saver" : screen === "locations" ? "Tax-Free Locations" : screen === "map" ? "US Tax Map" : screen === "savings" ? "Your Savings" : "Profile";
 
   return (
@@ -1043,6 +1051,7 @@ export default function Landed() {
         .sec-h{font-family:'Archivo',sans-serif;font-size:15px;font-weight:800;color:var(--ink);margin:5px 2px -2px;letter-spacing:-.01em;}
         .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:15px;box-shadow:0 1px 2px rgba(16,34,26,.04),0 16px 30px -26px rgba(16,34,26,.5);}
         .hint{font-size:12px;color:var(--muted);margin:-2px 0 13px;}
+        .notice{background:#FFF7E8;border:1px solid #F1E1BE;border-radius:13px;padding:13px 14px;font-size:12.5px;font-weight:600;color:#8A6516;line-height:1.45;}
         .about{text-align:center;font-size:11.5px;color:var(--muted);padding:8px 16px 4px;line-height:1.5;}
         .optgroup{display:flex;flex-direction:column;gap:10px;}
         .optcard{display:flex;align-items:center;gap:13px;width:100%;text-align:left;background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:14px;cursor:pointer;}
@@ -1255,12 +1264,15 @@ export default function Landed() {
             <div><div className="save-k">Estimated tax</div><div className="save-v alt">{money(chosenTax)}</div><div className="save-sub">{chosen === "store" && chosenTax < homeTax ? "Instead of " + money(homeTax) : "On a " + money(price) + " item"}</div></div>
           </div>
 
-          {chosen === "store" && storeAvail ? (
-            <a className="cta" href={dirURL} target="_blank" rel="noopener noreferrer">{"Start Shopping & Save"}</a>
-          ) : (
-            <a className="cta" href={shopURL} target="_blank" rel="noopener noreferrer">{chosen === "store" ? "Shop online instead" : "Start Shopping & Save"}</a>
+          {chosen === "store" && storeWorthIt ? (<>
+            <a className="cta" href={dirURL} target="_blank" rel="noopener noreferrer" aria-label="Start shopping — open driving directions to the pickup in Google Maps">{"Start Shopping & Save"}</a>
+            <a className="cta sec" href={findStoresURL} target="_blank" rel="noopener noreferrer">Find stores near the pickup</a>
+          </>) : chosen === "store" ? (<>
+            <div className="notice">{storeNudge}</div>
+            <button type="button" className="cta" onClick={() => setOption("deliver")}>Deliver to Home instead</button>
+          </>) : (
+            <a className="cta" href={shopURL} target="_blank" rel="noopener noreferrer">{"Start Shopping & Save"}</a>
           )}
-          {chosen === "store" && storeAvail && <a className="cta sec" href={findStoresURL} target="_blank" rel="noopener noreferrer">Find stores near the pickup</a>}
         </>)}
 
         {screen === "locations" && (<>
