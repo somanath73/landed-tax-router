@@ -698,7 +698,7 @@ export default function Landed() {
   const youCouldSave = Math.max(0, savings);
   const homeTax = homeOpt.tax;
   const chosenTax = chosen === "store" && bestAlt ? bestAlt.tax : homeTax;
-  const screenTitle = screen === "home" ? "Sales Tax Saver" : screen === "locations" ? "Tax-Free Locations" : screen === "savings" ? "Your Savings" : "Profile";
+  const screenTitle = screen === "home" ? "Sales Tax Saver" : screen === "locations" ? "Tax-Free Locations" : screen === "map" ? "US Tax Map" : screen === "savings" ? "Your Savings" : "Profile";
 
   return (
     <div className="ld-root" data-boot={boot}>
@@ -1031,7 +1031,7 @@ export default function Landed() {
         .abar-ic svg{width:22px;height:22px;}
         .abar-ic:active{background:var(--sea);}
         .screen{flex:1;display:flex;flex-direction:column;gap:14px;padding:16px 16px 26px;}
-        .bnav{position:sticky;bottom:0;z-index:20;display:grid;grid-template-columns:repeat(4,1fr);gap:2px;background:rgba(255,255,255,.96);backdrop-filter:saturate(1.4) blur(10px);-webkit-backdrop-filter:saturate(1.4) blur(10px);border-top:1px solid var(--line);padding:7px 4px;padding-bottom:calc(7px + env(safe-area-inset-bottom));}
+        .bnav{position:sticky;bottom:0;z-index:20;display:grid;grid-template-columns:repeat(5,1fr);gap:2px;background:rgba(255,255,255,.96);backdrop-filter:saturate(1.4) blur(10px);-webkit-backdrop-filter:saturate(1.4) blur(10px);border-top:1px solid var(--line);padding:7px 4px;padding-bottom:calc(7px + env(safe-area-inset-bottom));}
         .bnav button{display:flex;flex-direction:column;align-items:center;gap:3px;border:none;background:transparent;color:var(--muted);font-family:'Archivo',sans-serif;font-size:10.5px;font-weight:700;cursor:pointer;padding:4px 0;border-radius:10px;}
         .bnav svg{width:23px;height:23px;}
         .bnav button[data-on=true]{color:var(--go);}
@@ -1168,9 +1168,9 @@ export default function Landed() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
           </button>
           <div className="abar-title">{screenTitle}</div>
-          <button type="button" className="abar-ic" aria-label="Notifications">
+          <span className="abar-ic" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0" /></svg>
-          </button>
+          </span>
         </header>
 
         <main className="screen">
@@ -1263,11 +1263,7 @@ export default function Landed() {
           {chosen === "store" && storeAvail && <a className="cta sec" href={findStoresURL} target="_blank" rel="noopener noreferrer">Find stores near the pickup</a>}
         </>)}
 
-        {screen === "locations" && (view === "us" ? (<>
-          <button type="button" className="link" onClick={() => setView("map")}>‹ Back to nearby</button>
-          <p className="hint">US sales-tax rates by state — tap any state to drill into its county rates.</p>
-          <div className="uswrap"><RatesMap /></div>
-        </>) : (<>
+        {screen === "locations" && (<>
           <div className="seg2">
             <button type="button" data-on={view !== "ledger"} onClick={() => setView("map")}>Map View</button>
             <button type="button" data-on={view === "ledger"} onClick={() => setView("ledger")}>List View</button>
@@ -1304,7 +1300,7 @@ export default function Landed() {
               const free = c.taxFree || c.combinedRate === 0;
               const url = c.lat != null ? `https://www.google.com/maps/dir/?api=1&origin=${enc(homeGeo.zip || homeGeo.label || "")}&destination=${c.lat},${c.lng}` : null;
               return (
-                <a key={c.name + (c.zip || "")} className="locrow" href={url || undefined} target={url ? "_blank" : undefined} rel="noopener noreferrer">
+                <a key={c.name + (c.zip || "")} className="locrow" href={url || undefined} target={url ? "_blank" : undefined} rel="noopener noreferrer" aria-label={url ? `${c.name} — ${free ? "no sales tax" : pct(c.combinedRate)}, ${c.miles} mi away. Open driving directions in Google Maps.` : c.name}>
                   <span className="locrow-ic" data-free={free} aria-hidden="true">%</span>
                   <span className="locrow-b">
                     <span className="locrow-t">{c.name}</span>
@@ -1317,8 +1313,12 @@ export default function Landed() {
             })}
           </div>
           {nearestFree && !homeFree && <div className="tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.2 1 2.5h6c0-1.3.3-1.8 1-2.5A6 6 0 0 0 12 3Z" /></svg><span>Nearest no-sales-tax state: <b>{nearestFree.name}</b>, about {Math.round(nearestFree.d)} mi away.</span></div>}
-          <button type="button" className="link center" onClick={() => setView("us")}>See full US tax map →</button>
-        </>))}
+        </>)}
+
+        {screen === "map" && (<>
+          <p className="hint">US sales-tax rates by state — <b>tap any state</b> to drill into its real county rates.</p>
+          <div className="uswrap"><RatesMap /></div>
+        </>)}
 
         {screen === "savings" && (<>
           <section className="banner">
@@ -1427,6 +1427,9 @@ export default function Landed() {
           </button>
           <button type="button" data-on={screen === "locations"} aria-current={screen === "locations"} onClick={() => setScreen("locations")}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M12 21s6-5.7 6-10.5A6 6 0 0 0 6 10.5C6 15.3 12 21 12 21Z" /><circle cx="12" cy="10.3" r="2" /></svg><span>Locations</span>
+          </button>
+          <button type="button" data-on={screen === "map"} aria-current={screen === "map"} onClick={() => setScreen("map")}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M9 4 3.5 6v14l5.5-2 6 2 5.5-2V4l-5.5 2-6-2Z" /><path d="M9 4v14M15 6v14" /></svg><span>Tax Map</span>
           </button>
           <button type="button" data-on={screen === "savings"} aria-current={screen === "savings"} onClick={() => setScreen("savings")}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 3v18M16 6.5C16 4.9 14.2 4 12 4S8 5 8 6.8 9.8 9.5 12 9.5s4 1 4 2.8-1.8 2.7-4 2.7-4-.9-4-2.5" /></svg><span>Savings</span>
