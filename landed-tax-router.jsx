@@ -578,7 +578,21 @@ export default function Landed() {
         if (geo.zip) setZipInput(geo.zip); else if (geo.city) setZipInput(geo.city);
         setResolving(false);
       },
-      (err) => { if (my !== reqRef.current) return; setResolving(false); if (err && err.code === 1) setGeoPerm("denied"); if (manual) setGeoErr(err && err.code === 1 ? "Location is blocked — allow it in your browser, or type a ZIP / city." : "Couldn't get your location — type a ZIP or city."); },
+      (err) => {
+        if (my !== reqRef.current) return;
+        setResolving(false);
+        const denied = err && err.code === 1;
+        if (denied) setGeoPerm("denied");
+        if (!manual) return;
+        const framed = (() => { try { return window.self !== window.top; } catch { return true; } })();
+        setGeoErr(
+          denied
+            ? (framed
+                ? "This embedded preview blocks location. Open the site in its own browser tab — or just type a ZIP / city below."
+                : "Location is off for this site. Allow it in the browser's site settings (tap the lock icon in the address bar), then reload — or just type a ZIP / city.")
+            : "Couldn't pin your location — type a ZIP or city instead."
+        );
+      },
       { enableHighAccuracy: false, timeout: 8000, maximumAge: 600000 }
     );
   }
@@ -1109,7 +1123,7 @@ export default function Landed() {
         .upchip{display:inline-flex;align-items:center;gap:6px;background:var(--go-soft);color:var(--go-d);border-radius:999px;padding:6px 6px 6px 12px;font-size:12.5px;font-weight:600;}
         .upchip button{border:none;background:rgba(0,0,0,.07);color:var(--go-d);width:20px;height:20px;border-radius:50%;cursor:pointer;font-size:13px;line-height:1;display:grid;place-items:center;}
         .mapprev{position:relative;display:block;width:100%;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--sea);cursor:pointer;padding:0;}
-        .mapprev-map{display:block;height:172px;overflow:hidden;pointer-events:none;}
+        .mapprev-map{display:block;overflow:hidden;pointer-events:none;}
         .mapprev-map svg{width:100%;height:auto;}
         .mapprev-btn{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:inline-flex;align-items:center;gap:7px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:9px 16px;font-family:'Archivo',sans-serif;font-weight:800;font-size:13px;color:var(--ink);box-shadow:0 6px 16px -6px rgba(16,34,26,.4);}
         .mapprev-btn svg{width:16px;height:16px;color:var(--go);}
@@ -1715,25 +1729,32 @@ function RatesDetail({ ab, mode, flCounties, liveRate }) {
 
 // ---- Map view ------------------------------------------------------------
 function MapView({ home, all, radiusMi, reroute, recoKey }) {
-  const W = 600, H = 440, PAD = 48;
+  const W = 640, H = 400, TILE = 256;
   const [focus, setFocus] = useState(null);
   const cands = all.filter((o) => o.tag !== "home");
   const keyOf = (o) => o.name + (o.zip || "");
 
+  // Web-Mercator tile mosaic (keyless Esri World Imagery satellite tiles) with markers re-projected on top.
   const geo = useMemo(() => {
-    const lat0 = home.lat, lng0 = home.lng, k = Math.cos((lat0 * Math.PI) / 180);
-    const u = (p) => (p.lng - lng0) * k, v = (p) => p.lat - lat0, Rdeg = radiusMi / MI;
-    const pts = [home, ...cands];
-    const us = pts.map(u).concat([-Rdeg, Rdeg]), vs = pts.map(v).concat([-Rdeg, Rdeg]);
-    const minU = Math.min(...us), maxU = Math.max(...us), minV = Math.min(...vs), maxV = Math.max(...vs);
-    const bw = maxU - minU || 1, bh = maxV - minV || 1;
-    const s = Math.min((W - 2 * PAD) / bw, (H - 2 * PAD) / bh);
-    const offX = (W - bw * s) / 2, offY = (H - bh * s) / 2;
-    const proj = (p) => ({ x: offX + (u(p) - minU) * s, y: offY + (maxV - v(p)) * s });
-    return { proj, homeS: proj(home), ringR: Rdeg * s };
+    const lat0 = home.lat, lng0 = home.lng, latRad = (lat0 * Math.PI) / 180;
+    const wx = (lng, z) => ((lng + 180) / 360) * TILE * Math.pow(2, z);
+    const wy = (lat, z) => { const s = Math.min(Math.max(Math.sin((lat * Math.PI) / 180), -0.9999), 0.9999); return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * TILE * Math.pow(2, z); };
+    const radiusM = Math.max(1, radiusMi) * 1609.34;
+    const targetPx = 0.42 * Math.min(W, H); // fit the radius ring to ~42% of the short side
+    let z = Math.log2((targetPx * 156543.03392 * Math.cos(latRad)) / radiusM);
+    z = Math.max(3, Math.min(12, Math.round(z)));
+    const n = Math.pow(2, z);
+    const originX = wx(lng0, z) - W / 2, originY = wy(lat0, z) - H / 2; // world px at container (0,0)
+    const proj = (p) => ({ x: wx(p.lng, z) - originX, y: wy(p.lat, z) - originY });
+    const ringR = (radiusM * n) / (156543.03392 * Math.cos(latRad));
+    const tiles = [];
+    for (let tx = Math.floor(originX / TILE); tx <= Math.floor((originX + W) / TILE); tx++)
+      for (let ty = Math.floor(originY / TILE); ty <= Math.floor((originY + H) / TILE); ty++)
+        if (tx >= 0 && ty >= 0 && tx < n && ty < n) tiles.push({ tx, ty, sx: tx * TILE - originX, sy: ty * TILE - originY });
+    return { proj, homeS: proj(home), ringR, z, tiles };
   }, [home, all, radiusMi]);
 
-  const { proj, homeS, ringR } = geo;
+  const { proj, homeS, ringR, z, tiles } = geo;
   const route = (a, b) => {
     const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1, off = len * 0.13;
     return `M ${a.x} ${a.y} Q ${mx - (dy / len) * off} ${my + (dx / len) * off} ${b.x} ${b.y}`;
@@ -1743,34 +1764,39 @@ function MapView({ home, all, radiusMi, reroute, recoKey }) {
   const homeReco = !reroute;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Map of your home location and nearby pickup jurisdictions within the selected radius" style={{ width: "100%", height: "auto", display: "block", borderRadius: 6, background: "#FFFFFF" }} onClick={() => setFocus(null)}>
-      <rect x="0" y="0" width={W} height={H} fill="#E4EDE7" />
-      <circle cx={homeS.x} cy={homeS.y} r={ringR} fill="rgba(61,220,151,0.05)" stroke="#A7B7AD" strokeWidth="1" strokeDasharray="3 5" opacity="0.6" />
-      <text x={homeS.x} y={homeS.y - ringR - 6} textAnchor="middle" fontFamily="IBM Plex Mono" fontSize="10" fill="#6B7B72">{radiusMi} mi</text>
+    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Satellite map of your home location and nearby pickup jurisdictions within the selected radius" style={{ width: "100%", height: "auto", display: "block", borderRadius: 7, background: "#0B1F17" }} onClick={() => setFocus(null)}>
+      <defs><clipPath id="mvclip"><rect x="0" y="0" width={W} height={H} rx="7" /></clipPath></defs>
+      <g clipPath="url(#mvclip)">
+      {tiles.map((t) => (
+        <image key={t.tx + "_" + t.ty} href={`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${t.ty}/${t.tx}`} x={t.sx} y={t.sy} width={TILE + 0.6} height={TILE + 0.6} preserveAspectRatio="none" />
+      ))}
+      <rect x="0" y="0" width={W} height={H} fill="rgba(7,18,13,0.22)" />
+      <circle cx={homeS.x} cy={homeS.y} r={ringR} fill="rgba(255,255,255,0.04)" stroke="#FFFFFF" strokeWidth="1.3" strokeDasharray="4 6" opacity="0.7" />
+      <text x={homeS.x} y={homeS.y - ringR - 7} textAnchor="middle" fontFamily="IBM Plex Mono" fontSize="11" fill="#FFFFFF" stroke="#06231B" strokeWidth="2.6" paintOrder="stroke" strokeLinejoin="round">{radiusMi} mi</text>
 
-      {cands.map((o) => { const c = proj(o), isReco = reroute && keyOf(o) === recoKey; return <path key={"r" + keyOf(o)} d={route(homeS, c)} fill="none" stroke={isReco ? "#1FA254" : "#A7B7AD"} strokeWidth={isReco ? 2.4 : 1.2} strokeDasharray="5 5" opacity={isReco ? 0.95 : 0.3} style={isReco ? { animation: "dash 24s linear infinite" } : undefined} />; })}
+      {cands.map((o) => { const c = proj(o), isReco = reroute && keyOf(o) === recoKey; return <path key={"r" + keyOf(o)} d={route(homeS, c)} fill="none" stroke={isReco ? "#2BE3B4" : "#FFFFFF"} strokeWidth={isReco ? 2.6 : 1.3} strokeDasharray="5 5" opacity={isReco ? 0.95 : 0.5} style={isReco ? { animation: "dash 24s linear infinite" } : undefined} />; })}
 
       {cands.map((o) => {
         const c = proj(o), isReco = reroute && keyOf(o) === recoKey, free = o.taxFree;
         return (
-          <g key={"p" + keyOf(o)} transform={`translate(${c.x},${c.y})`} style={{ cursor: "pointer" }} opacity={isReco ? 1 : 0.42}
+          <g key={"p" + keyOf(o)} transform={`translate(${c.x},${c.y})`} style={{ cursor: "pointer" }} opacity={isReco ? 1 : 0.92}
             onMouseEnter={() => setFocus(keyOf(o))} onMouseLeave={() => setFocus(null)}
             onClick={(e) => { e.stopPropagation(); setFocus(focus === keyOf(o) ? null : keyOf(o)); }}>
-            {isReco && <circle r="14" fill="none" stroke="#1FA254" strokeWidth="2" opacity="0.45" />}
-            {free && !isReco && <circle r="13" fill="none" stroke="#1FA254" strokeWidth="1" opacity="0.5" />}
-            <circle r="8" fill={isReco ? "#1FA254" : "#FFFFFF"} stroke={isReco || free ? "#1FA254" : "#A7B7AD"} strokeWidth="2.5" />
+            {isReco && <circle r="14" fill="none" stroke="#2BE3B4" strokeWidth="2" opacity="0.6" />}
+            {free && !isReco && <circle r="13" fill="none" stroke="#19C68B" strokeWidth="1.4" opacity="0.6" />}
+            <circle r="8" fill={isReco ? "#19C68B" : "#FFFFFF"} stroke={isReco || free ? "#19C68B" : "#FFFFFF"} strokeWidth="2.5" />
             {isReco && <circle r="3" fill="#FFFFFF" />}
-            {free && !isReco && <text x="0" y="3.5" textAnchor="middle" fontFamily="IBM Plex Mono" fontSize="8" fontWeight="600" fill="#1FA254">0</text>}
-            <text x="0" y="20" textAnchor="middle" fontFamily="Archivo" fontSize="10" fontWeight="700" fill="#10221A" stroke="#FFFFFF" strokeWidth="3.2" paintOrder="stroke" strokeLinejoin="round">{o.name.split(/[,\u00b7]/)[0].trim()}</text>
+            {free && !isReco && <text x="0" y="3.3" textAnchor="middle" fontFamily="IBM Plex Mono" fontSize="8.5" fontWeight="700" fill="#0E7A52">0</text>}
+            <text x="0" y="20" textAnchor="middle" fontFamily="Archivo" fontSize="10.5" fontWeight="700" fill="#FFFFFF" stroke="#06231B" strokeWidth="3" paintOrder="stroke" strokeLinejoin="round">{o.name.split(/[,\u00b7]/)[0].trim()}</text>
           </g>
         );
       })}
 
       <g transform={`translate(${homeS.x},${homeS.y})`}>
-        {homeReco && <circle r="14" fill="none" stroke="#10221A" strokeWidth="2" opacity="0.3" />}
-        <circle r="11" fill="none" stroke="#10221A" strokeWidth="1.5" opacity="0.4" />
-        <rect x="-6" y="-6" width="12" height="12" transform="rotate(45)" fill="#10221A" />
-        <text x="0" y="-18" textAnchor="middle" fontFamily="Archivo" fontSize="11" fontWeight="700" fill="#10221A" stroke="#FFFFFF" strokeWidth="3.5" paintOrder="stroke" strokeLinejoin="round">{home.name.split(/[,\u00b7]/)[0].trim()}</text>
+        {homeReco && <circle r="14" fill="none" stroke="#FFFFFF" strokeWidth="2" opacity="0.5" />}
+        <circle r="11" fill="none" stroke="#FFFFFF" strokeWidth="1.5" opacity="0.55" />
+        <rect x="-6" y="-6" width="12" height="12" transform="rotate(45)" fill="#FFFFFF" stroke="#06231B" strokeWidth="1.5" />
+        <text x="0" y="-18" textAnchor="middle" fontFamily="Archivo" fontSize="11.5" fontWeight="700" fill="#FFFFFF" stroke="#06231B" strokeWidth="3.5" paintOrder="stroke" strokeLinejoin="round">{home.name.split(/[,\u00b7]/)[0].trim()}</text>
       </g>
 
       {recoCand && (() => { const c = proj(recoCand); return (
@@ -1782,9 +1808,9 @@ function MapView({ home, all, radiusMi, reroute, recoKey }) {
       ); })()}
       {homeReco && (
         <g transform={`translate(${homeS.x},${homeS.y + 28})`} pointerEvents="none">
-          <path d="M -5 -9 L 0 -15 L 5 -9 Z" fill="#10221A" />
-          <rect x="-39" y="-9" width="78" height="19" rx="9.5" fill="#10221A" />
-          <text x="0" y="4.5" textAnchor="middle" fontFamily="Archivo" fontSize="9.5" fontWeight="700" fill="#FFFFFF" letterSpacing="0.6">SHIP HERE</text>
+          <path d="M -5 -9 L 0 -15 L 5 -9 Z" fill="#FFFFFF" />
+          <rect x="-39" y="-9" width="78" height="19" rx="9.5" fill="#FFFFFF" />
+          <text x="0" y="4.5" textAnchor="middle" fontFamily="Archivo" fontSize="9.5" fontWeight="700" fill="#0B1F17" letterSpacing="0.6">SHIP HERE</text>
         </g>
       )}
 
@@ -1801,6 +1827,7 @@ function MapView({ home, all, radiusMi, reroute, recoKey }) {
           </g>
         );
       })()}
+      </g>
     </svg>
   );
 }
