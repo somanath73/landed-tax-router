@@ -490,6 +490,7 @@ export default function Landed() {
   const [radius, setRadius] = usePersistentState("sts:radius", 100);
   const [calcAmt, setCalcAmt] = useState(1000);
   const [view, setView] = useState("map");
+  const [mapFilter, setMapFilter] = useState("all"); // Locations filter: all | best | 50 | 100
   const [tab, setTab] = useState("router"); // top-level tab: "router" | "map"
   const [screen, setScreen] = useState("home"); // bottom nav: home | locations | savings | profile
   const [option, setOption] = useState(null);   // chosen fulfillment: "store" | "deliver" | null (=use recommendation)
@@ -777,6 +778,7 @@ export default function Landed() {
   }, [homeGeo, homeRate, userPoints, price, category, freeShip, costPerMile, timeValue, minSavings, pickupFee, radius, counties]);
 
   const { homeOpt, all, cands, bestAlt, savings, taxOnly, gross, reroute, crossState, max, min, nearestFree, genericCut } = result;
+  const fcands = mapFilter === "best" ? cands.slice(0, 1) : mapFilter === "50" ? cands.filter((c) => c.miles <= 50) : mapFilter === "100" ? cands.filter((c) => c.miles <= 100) : cands;
   const homeFree = NOMAD.has(homeGeo.state);
   const altCheaper = !!bestAlt && bestAlt.landed < homeOpt.landed;
   const belowBar = altCheaper && !reroute;
@@ -1275,6 +1277,10 @@ export default function Landed() {
         .seg2{display:flex;background:#E5ECE8;border-radius:13px;padding:4px;gap:4px;}
         .seg2 button{flex:1;border:none;background:transparent;border-radius:10px;padding:10px;font-family:'Archivo',sans-serif;font-weight:800;font-size:13.5px;color:var(--sub);cursor:pointer;}
         .seg2 button[data-on=true]{background:var(--go);color:#fff;}
+        .fchips{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;-ms-overflow-style:none;scrollbar-width:none;}
+        .fchips::-webkit-scrollbar{display:none;}
+        .fchip{flex:none;border:1.5px solid var(--line);background:#fff;color:var(--sub);border-radius:999px;padding:7px 13px;font-family:'Archivo',sans-serif;font-weight:700;font-size:12.5px;cursor:pointer;white-space:nowrap;}
+        .fchip[data-on=true]{background:var(--go);color:#fff;border-color:var(--go);}
         .tip{display:flex;gap:10px;align-items:center;background:var(--go-soft);border:1px solid #CBE7D5;border-radius:14px;padding:13px 14px;font-size:12.5px;font-weight:600;color:var(--go-d);}
         .tip svg{flex:none;width:22px;height:22px;color:var(--go);}
         .screen .empty{text-align:center;color:var(--muted);font-size:13px;padding:18px;background:var(--card);border:1px dashed var(--line);border-radius:14px;line-height:1.5;}
@@ -1511,15 +1517,25 @@ export default function Landed() {
             )}
           </div>
 
+          {cands.length > 0 && (
+            <div className="fchips">
+              {[["all", "All"], ["best", "Best"], ["50", "Within 50 mi"], ["100", "Within 100 mi"]].map(([k, l]) => (
+                <button key={k} type="button" className="fchip" data-on={mapFilter === k} onClick={() => setMapFilter(k)}>{l}</button>
+              ))}
+            </div>
+          )}
+
           {view !== "ledger" && (
-            <div className="uswrap"><MapView home={homeOpt} all={all} radiusMi={radius} reroute={reroute} recoKey={reroute && bestAlt ? bestAlt.name + (bestAlt.zip || "") : ""} interactive /></div>
+            <div className="uswrap"><MapView home={homeOpt} all={[homeOpt, ...fcands]} radiusMi={radius} reroute={reroute} recoKey={reroute && bestAlt ? bestAlt.name + (bestAlt.zip || "") : ""} interactive onDetails={setDetail} /></div>
           )}
 
           <div className="sec-h">Nearby Tax-Free Locations</div>
           <div className="loclist">
             {cands.length === 0 ? (
               <div className="empty">No lower-tax pickups within {radius} mi. Widen the search radius in Profile, or add a pickup there.</div>
-            ) : cands.map((c) => {
+            ) : fcands.length === 0 ? (
+              <div className="empty">No options match that filter — try a wider range.</div>
+            ) : fcands.map((c) => {
               const free = c.taxFree || c.combinedRate === 0;
               return (
                 <button key={c.name + (c.zip || "")} type="button" className="locrow" onClick={() => setDetail(c)} aria-label={`${c.name} — ${free ? "no sales tax" : pct(c.combinedRate)}, ${c.miles} mi away. View details.`}>
@@ -1975,7 +1991,7 @@ function RatesDetail({ ab, mode, flCounties, liveRate }) {
 }
 
 // ---- Map view ------------------------------------------------------------
-function MapView({ home, all, radiusMi, reroute, recoKey, interactive = false }) {
+function MapView({ home, all, radiusMi, reroute, recoKey, interactive = false, onDetails }) {
   const W = 640, H = 400, TILE = 256;
   const [focus, setFocus] = useState(null);
   const [cam, setCam] = useState(null); // {lat,lng,z} pan/zoom override; null = auto-fit on home
@@ -2045,16 +2061,19 @@ function MapView({ home, all, radiusMi, reroute, recoKey, interactive = false })
 
       {cands.map((o) => {
         const c = proj(o), isReco = reroute && keyOf(o) === recoKey, free = o.taxFree;
+        const sv = home.landed - o.landed;
+        const lbl = sv > 0 ? money0(sv) : (o.taxable ? pct(o.combinedRate) : "0%"); // savings on the pin, else the rate
+        const pw = Math.max(34, lbl.length * 8 + 16);
+        const fill = isReco ? "#0E9C66" : free ? "#19C68B" : "#FFFFFF";
+        const txt = (isReco || free) ? "#FFFFFF" : "#0B1F17";
         return (
-          <g key={"p" + keyOf(o)} data-nopan transform={`translate(${c.x},${c.y})`} style={{ cursor: "pointer" }} opacity={isReco ? 1 : 0.92}
+          <g key={"p" + keyOf(o)} data-nopan transform={`translate(${c.x},${c.y})`} style={{ cursor: "pointer" }} opacity={isReco ? 1 : 0.95}
             onMouseEnter={() => setFocus(keyOf(o))} onMouseLeave={() => setFocus(null)}
-            onClick={(e) => { e.stopPropagation(); setFocus(focus === keyOf(o) ? null : keyOf(o)); }}>
-            {isReco && <circle r="14" fill="none" stroke="#2BE3B4" strokeWidth="2" opacity="0.6" />}
-            {free && !isReco && <circle r="13" fill="none" stroke="#19C68B" strokeWidth="1.4" opacity="0.6" />}
-            <circle r="8" fill={isReco ? "#19C68B" : "#FFFFFF"} stroke={isReco || free ? "#19C68B" : "#FFFFFF"} strokeWidth="2.5" />
-            {isReco && <circle r="3" fill="#FFFFFF" />}
-            {free && !isReco && <text x="0" y="3.3" textAnchor="middle" fontFamily="IBM Plex Mono" fontSize="8.5" fontWeight="700" fill="#0E7A52">0</text>}
-            <text x="0" y="20" textAnchor="middle" fontFamily="Archivo" fontSize="10.5" fontWeight="700" fill="#FFFFFF" stroke="#06231B" strokeWidth="3" paintOrder="stroke" strokeLinejoin="round">{o.name.split(/[,\u00b7]/)[0].trim()}</text>
+            onClick={(e) => { e.stopPropagation(); if (interactive && onDetails) onDetails(o); else setFocus(focus === keyOf(o) ? null : keyOf(o)); }}>
+            {isReco && <rect x={-pw / 2 - 3} y="-15" width={pw + 6} height="30" rx="15" fill="none" stroke="#2BE3B4" strokeWidth="2" opacity="0.6" />}
+            <rect x={-pw / 2} y="-12" width={pw} height="24" rx="12" fill={fill} stroke={isReco ? "#0B6B47" : "#0E9C66"} strokeWidth="1.5" />
+            <text x="0" y="4.5" textAnchor="middle" fontFamily="Archivo" fontSize="11.5" fontWeight="800" fill={txt}>{lbl}</text>
+            <text x="0" y="30" textAnchor="middle" fontFamily="Archivo" fontSize="9.5" fontWeight="700" fill="#FFFFFF" stroke="#06231B" strokeWidth="2.6" paintOrder="stroke" strokeLinejoin="round">{o.name.split(/[,\u00b7]/)[0].trim()}</text>
           </g>
         );
       })}
