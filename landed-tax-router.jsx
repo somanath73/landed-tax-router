@@ -439,6 +439,8 @@ const SHOP_Q = { general: "stores", clothing: "clothing store", groceries: "groc
 const SHOP_ONLINE = { general: "", clothing: "clothing", groceries: "groceries", rx: "" };
 // Voluntary "buy me a coffee" tip link (set to your own handle/URL).
 const DONATE_URL = "https://www.buymeacoffee.com/somanath73";
+// Public home of the live app — used by the "Share with friends" action.
+const APP_URL = "https://somanath73.github.io/landed-tax-router/";
 
 // State that persists to localStorage, so user settings stick until they change them again.
 const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } };
@@ -492,7 +494,8 @@ export default function Landed() {
   const [view, setView] = useState("map");
   const [mapFilter, setMapFilter] = useState("all"); // Locations filter: all | best | 50 | 100
   const [searched, setSearched] = useState(false);   // Home: false = Find form, true = Best Option result
-  const [compareOpen, setCompareOpen] = useState(false); // Compare-options overlay (reached from the result)
+  const [cmpInline, setCmpInline] = useState(false);     // inline compare breakdown on the Home result
+  const [shared, setShared] = useState("");              // brief feedback after a Share with friends tap
   const [tab, setTab] = useState("router"); // top-level tab: "router" | "map"
   const [screen, setScreen] = useState("home"); // bottom nav: home | locations | savings | profile
   const [option, setOption] = useState(null);   // chosen fulfillment: "store" | "deliver" | null (=use recommendation)
@@ -827,6 +830,55 @@ export default function Landed() {
       : [{ ts: Date.now(), place, amt, price }, ...h].slice(0, 60));
   };
 
+  const shareApp = async () => {
+    const data = { title: "Sales Tax Saver", text: "Find the cheapest way to buy — ship home vs. drive to a lower-tax pickup. Sales Tax Saver does the math.", url: APP_URL };
+    try {
+      if (navigator.share) { await navigator.share(data); return; }
+      await navigator.clipboard.writeText(APP_URL);
+      setShared("Link copied!");
+    } catch (e) {
+      if (e && e.name === "AbortError") return; // user dismissed the native sheet — not an error
+      try { await navigator.clipboard.writeText(APP_URL); setShared("Link copied!"); }
+      catch { setShared(APP_URL); }
+    }
+    setTimeout(() => setShared(""), 2200);
+  };
+
+  // Per-option cost breakdown (Ship to home vs Pickup nearby) — shared by the inline Home section and the overlay.
+  const renderCompare = (onEdit) => {
+    const opts = [{ ...homeOpt, role: "Ship to home", isHome: true }];
+    if (bestAlt) opts.push({ ...bestAlt, role: "Pickup nearby" });
+    const lowTotal = Math.min(...opts.map((o) => o.landed));
+    return (
+      <>
+        <div className="cmp-item">
+          <div><div className="cmp-item-k">Your item</div><div className="cmp-item-v">{money(price)} · {category.l}</div></div>
+          <button type="button" className="link" onClick={onEdit}>Edit</button>
+        </div>
+        {opts.map((o, i) => {
+          const best = o.landed === lowTotal, save = homeOpt.landed - o.landed;
+          return (
+            <div className="cmp-card" data-best={best} key={i}>
+              <div className="cmp-card-h"><span className="cmp-card-t">{o.role}{!o.isHome && o.miles != null ? ` · ${o.miles} mi` : ""}</span>{best && <span className="cmp-best">Best</span>}</div>
+              <div className="cmp-line"><span>Item price</span><span>{money(price)}</span></div>
+              <div className="cmp-line"><span>Sales tax {o.taxable ? "(" + pct(o.combinedRate) + ")" : "(exempt)"}</span><span>{money(o.tax)}</span></div>
+              {o.isHome ? (
+                <div className="cmp-line"><span>Shipping</span><span>{money(o.shipping)}</span></div>
+              ) : (<>
+                {o.mileageCost > 0 && <div className="cmp-line"><span>Drive cost ({o.rtMiles} mi)</span><span>{money(o.mileageCost)}</span></div>}
+                {o.timeCost > 0 && <div className="cmp-line"><span>Your time ({(o.rtMiles / AVG_SPEED).toFixed(1)} hrs)</span><span>{money(o.timeCost)}</span></div>}
+                {o.pickup > 0 && <div className="cmp-line"><span>Pickup fee</span><span>{money(o.pickup)}</span></div>}
+              </>)}
+              <div className="cmp-line total"><span>Total cost</span><span>{money(o.landed)}</span></div>
+              {save > 0 ? <div className="cmp-save">You save {money(save)} vs delivery</div> : (!o.isHome && save < 0 ? <div className="cmp-save neg">{money(-save)} more than delivery</div> : null)}
+            </div>
+          );
+        })}
+        <div className="dt-note">Totals include sales tax, shipping, and (for pickups) gas + your time. Not tax advice.</div>
+      </>
+    );
+  };
+
   return (
     <div className="ld-root" data-boot={boot}>
       <style>{`
@@ -968,7 +1020,7 @@ export default function Landed() {
         .cmp-name{font-weight:700;font-size:14px;}
         .cmp-where{font-size:12px;color:var(--sub);}
         .cmp-amt{margin-left:auto;font-family:'IBM Plex Mono';font-weight:700;font-size:16px;}
-        .cmp-best{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#FFFFFF;background:var(--go);border-radius:5px;padding:3px 7px;}
+        .cmp-best{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#FFFFFF;background:var(--go-d);border-radius:5px;padding:3px 7px;}
         .cmp-bar{height:12px;border-radius:6px;background:#FFFFFF12;overflow:hidden;}
         .cmp-fill{height:100%;border-radius:6px;transition:width .55s cubic-bezier(.4,0,.2,1);}
         .cmp-break{font-family:'IBM Plex Mono';font-size:11px;color:var(--sub);display:flex;gap:18px;margin-top:6px;}
@@ -1170,14 +1222,27 @@ export default function Landed() {
         .hint{font-size:12px;color:var(--muted);margin:-2px 0 13px;}
         .notice{background:#FFF7E8;border:1px solid #F1E1BE;border-radius:13px;padding:13px 14px;font-size:12.5px;font-weight:600;color:#8A6516;line-height:1.45;}
         .about{text-align:center;font-size:11.5px;color:var(--muted);padding:8px 16px 4px;line-height:1.5;}
-        .donate{display:flex;align-items:center;gap:12px;width:100%;text-decoration:none;background:#FFF8EC;border:1px solid #F1DFB6;border-radius:16px;padding:14px;cursor:pointer;}
-        .donate:active{transform:translateY(1px);}
-        .donate-ic{flex:none;width:42px;height:42px;border-radius:12px;background:#FFE9C2;display:grid;place-items:center;font-size:22px;}
-        .donate-b{flex:1;min-width:0;display:flex;flex-direction:column;}
-        .donate-t{font-family:'Archivo',sans-serif;font-weight:800;font-size:14.5px;color:#7A5A12;}
-        .donate-d{font-size:12px;color:#9A7A2E;margin-top:2px;line-height:1.35;}
-        .donate-arrow{flex:none;color:#B9831C;font-weight:800;font-size:15px;}
-        .dash{background:linear-gradient(135deg,#1FA254,#0B7F88);color:#fff;border-radius:18px;padding:18px;box-shadow:0 14px 30px -18px rgba(11,127,136,.6);}
+        .supp{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;box-shadow:0 1px 2px rgba(16,34,26,.04),0 16px 30px -26px rgba(16,34,26,.5);}
+        .supp-head{display:flex;gap:13px;align-items:flex-start;margin-bottom:14px;}
+        .supp-ic{flex:none;width:42px;height:42px;border-radius:50%;display:grid;place-items:center;}
+        .supp-ic.heart{background:#FCE3EA;color:#D6376B;}
+        .supp-tx{flex:1;min-width:0;}
+        .supp-t{font-family:'Archivo',sans-serif;font-weight:800;font-size:15.5px;color:var(--ink);letter-spacing:-.01em;}
+        .supp-d{font-size:12.5px;color:var(--sub);margin-top:3px;line-height:1.42;}
+        .bmac{display:flex;align-items:center;justify-content:center;gap:11px;width:100%;text-decoration:none;background:#FFF0C8;border:1px solid #EED699;border-radius:14px;padding:14px;cursor:pointer;}
+        .bmac:hover{background:#FFEBB8;}
+        .bmac:active{transform:translateY(1px);}
+        .bmac-cup{flex:none;display:grid;place-items:center;color:#B9831C;}
+        .bmac-t{font-family:'Archivo',sans-serif;font-weight:800;font-size:16px;color:#5A4410;letter-spacing:-.01em;}
+        .share{display:flex;align-items:center;gap:13px;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:13px 15px;cursor:pointer;box-shadow:0 1px 2px rgba(16,34,26,.04),0 16px 30px -26px rgba(16,34,26,.5);}
+        .share:hover{border-color:#CFE6D8;}
+        .share:active{transform:translateY(1px);}
+        .share-ic{flex:none;width:42px;height:42px;border-radius:50%;background:var(--go-soft);color:var(--go-d);display:grid;place-items:center;}
+        .share-b{flex:1;min-width:0;display:flex;flex-direction:column;}
+        .share-t{font-family:'Archivo',sans-serif;font-weight:800;font-size:14.5px;color:var(--ink);}
+        .share-d{font-size:12px;color:var(--sub);margin-top:2px;line-height:1.35;}
+        .share-arrow{flex:none;color:var(--muted);font-weight:800;font-size:22px;line-height:1;}
+        .dash{background:linear-gradient(135deg,#157F43,#0B6E76);color:#fff;border-radius:18px;padding:18px;box-shadow:0 14px 30px -18px rgba(11,127,136,.6);}
         .dash-k{font-size:12px;opacity:.85;}
         .dash-big{font-family:'Archivo',sans-serif;font-size:36px;font-weight:800;letter-spacing:-.02em;margin-top:2px;line-height:1;}
         .dash-spark{display:block;width:100%;height:46px;margin:12px 0 4px;overflow:visible;}
@@ -1189,8 +1254,8 @@ export default function Landed() {
         .cmprow b{font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;color:var(--ink);}
         .cmprow span{display:block;font-size:11.5px;color:var(--muted);margin-top:2px;}
         .cmprow-amt{flex:none;font-weight:800;color:var(--go-d);font-size:13.5px;white-space:nowrap;}
-        .rhero{background:linear-gradient(135deg,#1FA254,#0B7F88);color:#fff;border-radius:18px;padding:20px 18px;text-align:center;box-shadow:0 16px 34px -18px rgba(11,127,136,.6);}
-        .rhero.alt{background:linear-gradient(135deg,#3F7CC4,#5B5FD0);}
+        .rhero{background:linear-gradient(135deg,#157F43,#0B6E76);color:#fff;border-radius:18px;padding:20px 18px;text-align:center;box-shadow:0 16px 34px -18px rgba(11,127,136,.6);}
+        .rhero.alt{background:linear-gradient(135deg,#3A72B8,#5450C6);}
         .rhero-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,.2);border-radius:999px;padding:4px 12px;font-family:'Archivo',sans-serif;font-size:10.5px;font-weight:800;letter-spacing:.06em;}
         .rhero-t{font-family:'Archivo',sans-serif;font-size:21px;font-weight:800;margin-top:11px;letter-spacing:-.01em;}
         .rhero-k{font-size:12px;opacity:.85;margin-top:12px;}
@@ -1239,7 +1304,7 @@ export default function Landed() {
         .aczip{margin-left:auto;font-size:12px;color:var(--muted);}
         .locline{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12.5px;color:var(--sub);padding:0 2px;}
         .locline b{color:var(--ink);font-weight:700;}
-        .link{border:none;background:transparent;color:var(--go);font-family:'Archivo',sans-serif;font-weight:700;font-size:12.5px;cursor:pointer;padding:4px 0;align-self:flex-start;}
+        .link{border:none;background:transparent;color:var(--go-d);font-family:'Archivo',sans-serif;font-weight:700;font-size:12.5px;cursor:pointer;padding:4px 0;align-self:flex-start;}
         .link.center{align-self:center;margin-top:2px;}
         .errline{color:var(--stay);font-size:12.5px;font-weight:600;padding:0 2px;}
         .fld{margin-bottom:14px;}
@@ -1283,7 +1348,7 @@ export default function Landed() {
         .savecard[data-save=true] .save-v.big{color:var(--go);}
         .save-v.alt{color:var(--ink);font-size:22px;}
         .save-sub{font-size:11px;color:var(--muted);margin-top:3px;}
-        .cta{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:var(--go);color:#fff;border:none;border-radius:14px;padding:16px;font-family:'Archivo',sans-serif;font-size:16px;font-weight:800;letter-spacing:.01em;cursor:pointer;text-decoration:none;box-shadow:0 10px 22px -10px rgba(31,162,84,.7);}
+        .cta{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:var(--go-d);color:#fff;border:none;border-radius:14px;padding:16px;font-family:'Archivo',sans-serif;font-size:16px;font-weight:800;letter-spacing:.01em;cursor:pointer;text-decoration:none;box-shadow:0 10px 22px -10px rgba(31,162,84,.7);}
         .cta:active{transform:translateY(1px);}
         .cta.sec{background:#fff;color:var(--go-d);border:1.5px solid var(--go);box-shadow:none;}
         .loclist{display:flex;flex-direction:column;gap:9px;}
@@ -1319,7 +1384,7 @@ export default function Landed() {
         .cmp-name{font-family:'Archivo',sans-serif;font-weight:800;font-size:13.5px;color:var(--ink);}
         .cmp-where{font-size:11px;color:var(--sub);}
         .cmp-amt{margin-left:auto;font-weight:700;font-size:14px;color:var(--ink);}
-        .cmp-best{font-size:9.5px;font-weight:800;color:#fff;background:var(--go);border-radius:6px;padding:3px 7px;}
+        .cmp-best{font-size:9.5px;font-weight:800;color:#fff;background:var(--go-d);border-radius:6px;padding:3px 7px;}
         .cmp-bar{height:9px;border-radius:999px;background:var(--sea);overflow:hidden;}
         .cmp-fill{height:100%;border-radius:999px;}
         .cmp-break{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:5px;}
@@ -1345,8 +1410,8 @@ export default function Landed() {
         .hiw-ic svg{width:19px;height:19px;}
         .hiw-step b{font-family:'Archivo',sans-serif;font-size:13px;font-weight:800;color:var(--ink);}
         .hiw-step span:last-child{font-size:11.5px;color:var(--sub);line-height:1.35;}
-        .dt-hero{position:relative;height:150px;border-radius:18px;display:grid;place-items:center;background:linear-gradient(135deg,#1FA254,#0B7F88);color:rgba(255,255,255,.92);overflow:hidden;}
-        .dt-hero[data-free=false]{background:linear-gradient(135deg,#3F7CC4,#5B5FD0);}
+        .dt-hero{position:relative;height:150px;border-radius:18px;display:grid;place-items:center;background:linear-gradient(135deg,#157F43,#0B6E76);color:rgba(255,255,255,.92);overflow:hidden;}
+        .dt-hero[data-free=false]{background:linear-gradient(135deg,#3A72B8,#5450C6);}
         .dt-hero::after{content:"";position:absolute;inset:0;background:radial-gradient(120% 80% at 50% -10%,rgba(255,255,255,.18),transparent 60%);}
         .dt-pin{width:54px;height:54px;position:relative;z-index:1;filter:drop-shadow(0 6px 12px rgba(0,0,0,.25));}
         .dt-hbadge{position:absolute;top:12px;left:12px;z-index:1;background:#fff;color:var(--go-d);font-family:'Archivo',sans-serif;font-size:10.5px;font-weight:800;letter-spacing:.04em;border-radius:7px;padding:4px 9px;}
@@ -1363,8 +1428,8 @@ export default function Landed() {
 
       <div className="app">
         <header className="abar">
-          {detail || compareOpen ? (
-            <button type="button" className="abar-ic" aria-label="Back" onClick={() => (detail ? setDetail(null) : setCompareOpen(false))}>
+          {detail ? (
+            <button type="button" className="abar-ic" aria-label="Back" onClick={() => setDetail(null)}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
             </button>
           ) : (
@@ -1372,8 +1437,8 @@ export default function Landed() {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
             </button>
           )}
-          <div className="abar-title">{detail ? "Location" : compareOpen ? "Compare options" : screen === "home" ? <><span className="wm-a">Sales Tax</span> <span className="wm-b">Saver</span></> : screenTitle}</div>
-          {detail || compareOpen ? (
+          <div className="abar-title">{detail ? "Location" : screen === "home" ? <><span className="wm-a">Sales Tax</span> <span className="wm-b">Saver</span></> : screenTitle}</div>
+          {detail ? (
             <span className="abar-ic" aria-hidden="true" />
           ) : (
             <button type="button" className="abar-ic" aria-label="Settings" onClick={() => setScreen("profile")}>
@@ -1416,41 +1481,7 @@ export default function Landed() {
           );
         })()}
 
-        {compareOpen && (() => {
-          const opts = [{ ...homeOpt, role: "Ship to home", isHome: true }];
-          if (bestAlt) opts.push({ ...bestAlt, role: "Pickup nearby" });
-          const lowTotal = Math.min(...opts.map((o) => o.landed));
-          return (
-            <>
-              <div className="cmp-item">
-                <div><div className="cmp-item-k">Your item</div><div className="cmp-item-v">{money(price)} · {category.l}</div></div>
-                <button type="button" className="link" onClick={() => setCompareOpen(false)}>Edit</button>
-              </div>
-              {opts.map((o, i) => {
-                const best = o.landed === lowTotal, save = homeOpt.landed - o.landed;
-                return (
-                  <div className="cmp-card" data-best={best} key={i}>
-                    <div className="cmp-card-h"><span className="cmp-card-t">{o.role}{!o.isHome && o.miles != null ? ` · ${o.miles} mi` : ""}</span>{best && <span className="cmp-best">Best</span>}</div>
-                    <div className="cmp-line"><span>Item price</span><span>{money(price)}</span></div>
-                    <div className="cmp-line"><span>Sales tax {o.taxable ? "(" + pct(o.combinedRate) + ")" : "(exempt)"}</span><span>{money(o.tax)}</span></div>
-                    {o.isHome ? (
-                      <div className="cmp-line"><span>Shipping</span><span>{money(o.shipping)}</span></div>
-                    ) : (<>
-                      {o.mileageCost > 0 && <div className="cmp-line"><span>Drive cost ({o.rtMiles} mi)</span><span>{money(o.mileageCost)}</span></div>}
-                      {o.timeCost > 0 && <div className="cmp-line"><span>Your time ({(o.rtMiles / AVG_SPEED).toFixed(1)} hrs)</span><span>{money(o.timeCost)}</span></div>}
-                      {o.pickup > 0 && <div className="cmp-line"><span>Pickup fee</span><span>{money(o.pickup)}</span></div>}
-                    </>)}
-                    <div className="cmp-line total"><span>Total cost</span><span>{money(o.landed)}</span></div>
-                    {save > 0 ? <div className="cmp-save">You save {money(save)} vs delivery</div> : (!o.isHome && save < 0 ? <div className="cmp-save neg">{money(-save)} more than delivery</div> : null)}
-                  </div>
-                );
-              })}
-              <div className="dt-note">Totals include sales tax, shipping, and (for pickups) gas + your time. Not tax advice.</div>
-            </>
-          );
-        })()}
-
-        {!detail && !compareOpen && screen === "home" && (searched ? (<>
+        {!detail && screen === "home" && (searched ? (<>
           {reroute && bestAlt ? (
             <div className="rhero">
               <div className="rhero-badge"><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M5 4h14v2h2v2a4 4 0 0 1-4 4h-.4A5 5 0 0 1 13 14.9V17h3v2H8v-2h3v-2.1A5 5 0 0 1 7.4 12H7a4 4 0 0 1-4-4V6h2V4zm0 4v0a2 2 0 0 0 2 2V6H5v2zm14 0V6h-2v4a2 2 0 0 0 2-2z" /></svg> BEST DEAL</div>
@@ -1494,8 +1525,13 @@ export default function Landed() {
           </>) : (
             <a className="cta" href={shopURL} target="_blank" rel="noopener noreferrer">Shop online</a>
           )}
-          {bestAlt && <button type="button" className="cta sec" onClick={() => setCompareOpen(true)}>Compare all options</button>}
-          <button type="button" className="link center" onClick={() => setSearched(false)}>‹ Try another search</button>
+          {bestAlt && (
+            <button type="button" className="cta sec" aria-expanded={cmpInline} onClick={() => setCmpInline((v) => !v)}>
+              {cmpInline ? "Hide comparison" : "Compare all options"}
+            </button>
+          )}
+          {bestAlt && cmpInline && renderCompare(() => { setCmpInline(false); setSearched(false); })}
+          <button type="button" className="link center" onClick={() => { setCmpInline(false); setSearched(false); }}>‹ Try another search</button>
 
           <div className="sec-h">Nearby options</div>
           <button type="button" className="mapprev" onClick={() => setScreen("locations")} aria-label="View locations on map">
@@ -1547,11 +1583,11 @@ export default function Landed() {
             </div>
             <button type="button" className="tog" role="switch" aria-checked={freeShip} aria-label="Include free shipping" onClick={() => setFreeShip((v) => !v)}><span>Include free shipping</span><span className="switch" data-on={freeShip}><i /></span></button>
           </div>
-          <button type="button" className="cta" onClick={() => { locate(zipInput); setSearched(true); }}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" style={{ marginRight: 8 }} aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.2-3.2" /></svg>Find Best Savings</button>
+          <button type="button" className="cta" onClick={() => { locate(zipInput); setCmpInline(false); setSearched(true); }}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" style={{ marginRight: 8 }} aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.2-3.2" /></svg>Find Best Savings</button>
           <div className="dt-note">We factor in sales tax, drive cost, and your time to find real savings.</div>
         </>))}
 
-        {!detail && !compareOpen && screen === "locations" && (<>
+        {!detail && screen ==="locations" && (<>
           <div className="seg2">
             <button type="button" data-on={view !== "ledger"} onClick={() => setView("map")}>Map View</button>
             <button type="button" data-on={view === "ledger"} onClick={() => setView("ledger")}>List View</button>
@@ -1612,12 +1648,12 @@ export default function Landed() {
           {nearestFree && !homeFree && <div className="tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.2 1 2.5h6c0-1.3.3-1.8 1-2.5A6 6 0 0 0 12 3Z" /></svg><span>Nearest no-sales-tax state: <b>{nearestFree.name}</b>, about {Math.round(nearestFree.d)} mi away.</span></div>}
         </>)}
 
-        {!detail && !compareOpen && screen === "map" && (<>
+        {!detail && screen ==="map" && (<>
           <p className="hint">US sales-tax rates by state — <b>tap any state</b> to drill into its real county rates.</p>
           <div className="uswrap"><RatesMap /></div>
         </>)}
 
-        {!detail && !compareOpen && screen === "savings" && (<>
+        {!detail && screen ==="savings" && (<>
           {(() => {
             const ym = (t) => { const d = new Date(t); return d.getFullYear() + "-" + d.getMonth(); };
             const cur = ym(Date.now());
@@ -1726,11 +1762,23 @@ export default function Landed() {
             </div>
           )}
 
-          <a className="donate" href={DONATE_URL} target="_blank" rel="noopener noreferrer">
-            <span className="donate-ic" aria-hidden="true">☕</span>
-            <span className="donate-b"><span className="donate-t">{youCouldSave > 0 ? `Saved you ${money(youCouldSave)}? Buy me a coffee` : "Find this useful? Buy me a coffee"}</span><span className="donate-d">Tips keep Sales Tax Saver free and ad-free — thank you!</span></span>
-            <span className="donate-arrow" aria-hidden="true">↗</span>
-          </a>
+          <div className="supp">
+            <div className="supp-head">
+              <span className="supp-ic heart" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 20.7s-7.4-4.35-9.78-9.05C1.06 8.5 2.66 5.4 6 5.4c2.06 0 3.42 1.2 4.5 2.7C11.58 6.6 12.94 5.4 15 5.4c3.34 0 4.94 3.1 3.78 6.25C16.4 16.35 12 20.7 12 20.7Z" /></svg>
+              </span>
+              <div className="supp-tx">
+                <div className="supp-t">{youCouldSave > 0 ? `Saved you ${money(youCouldSave)}?` : "Find this useful?"}</div>
+                <div className="supp-d">Tips keep Sales Tax Saver free and ad-free — thank you!</div>
+              </div>
+            </div>
+            <a className="bmac" href={DONATE_URL} target="_blank" rel="noopener noreferrer">
+              <span className="bmac-cup" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8h12v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8Z" /><path d="M16 9h2.5a2.5 2.5 0 0 1 0 5H16" /><path d="M7 3.5c-.5.7-.5 1.3 0 2M11 3.5c-.5.7-.5 1.3 0 2" /></svg>
+              </span>
+              <span className="bmac-t">Buy Me a Coffee</span>
+            </a>
+          </div>
 
           <details className="foot">
             <summary>Data sources & accuracy · not tax advice</summary>
@@ -1738,7 +1786,7 @@ export default function Landed() {
           </details>
         </>)}
 
-        {!detail && !compareOpen && screen === "profile" && (<>
+        {!detail && screen ==="profile" && (<>
           <div className="sec-h">Trip assumptions</div>
           <div className="card">
             <div className="hint">Used to judge whether driving to a pickup is worth it.</div>
@@ -1760,11 +1808,35 @@ export default function Landed() {
             {userPoints.length > 0 && <div className="chiplist">{userPoints.map((u) => <span key={u.zip || u.label} className="upchip">{u.label}<button type="button" aria-label={"Remove " + u.label} onClick={() => setUserPoints((p) => p.filter((x) => (x.zip || x.label) !== (u.zip || u.label)))}>×</button></span>)}</div>}
           </div>
 
-          <a className="donate" href={DONATE_URL} target="_blank" rel="noopener noreferrer">
-            <span className="donate-ic" aria-hidden="true">☕</span>
-            <span className="donate-b"><span className="donate-t">Support Sales Tax Saver</span><span className="donate-d">Buy me a coffee if the app saved you money.</span></span>
-            <span className="donate-arrow" aria-hidden="true">↗</span>
-          </a>
+          <div className="sec-h">Support &amp; share</div>
+          <div className="supp">
+            <div className="supp-head">
+              <span className="supp-ic heart" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 20.7s-7.4-4.35-9.78-9.05C1.06 8.5 2.66 5.4 6 5.4c2.06 0 3.42 1.2 4.5 2.7C11.58 6.6 12.94 5.4 15 5.4c3.34 0 4.94 3.1 3.78 6.25C16.4 16.35 12 20.7 12 20.7Z" /></svg>
+              </span>
+              <div className="supp-tx">
+                <div className="supp-t">Love the app?</div>
+                <div className="supp-d">Support us and help keep Sales Tax Saver free for everyone.</div>
+              </div>
+            </div>
+            <a className="bmac" href={DONATE_URL} target="_blank" rel="noopener noreferrer">
+              <span className="bmac-cup" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8h12v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8Z" /><path d="M16 9h2.5a2.5 2.5 0 0 1 0 5H16" /><path d="M7 3.5c-.5.7-.5 1.3 0 2M11 3.5c-.5.7-.5 1.3 0 2" /></svg>
+              </span>
+              <span className="bmac-t">Buy Me a Coffee</span>
+            </a>
+          </div>
+
+          <button type="button" className="share" onClick={shareApp} aria-label="Share Sales Tax Saver with friends">
+            <span className="share-ic" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="8" r="3" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0" /><circle cx="17.5" cy="9.5" r="2.4" /><path d="M16 14.2a4.6 4.6 0 0 1 5 4.3" /></svg>
+            </span>
+            <span className="share-b">
+              <span className="share-t">Share with friends</span>
+              <span className="share-d" aria-live="polite" aria-atomic="true">{shared || "Help others save too!"}</span>
+            </span>
+            <span className="share-arrow" aria-hidden="true">›</span>
+          </button>
 
           <div className="about">Sales Tax Saver · the true cost of buying online — price + sales tax + gas + time.</div>
         </>)}
@@ -2060,7 +2132,7 @@ function MapView({ home, all, radiusMi, reroute, recoKey, interactive = false, o
   const keyOf = (o) => o.name + (o.zip || "");
   useEffect(() => { setCam(null); }, [home.lat, home.lng, radiusMi]); // recenter when home or radius changes
 
-  // Web-Mercator tile mosaic (keyless Esri World Imagery satellite tiles) with markers re-projected on top.
+  // Web-Mercator tile mosaic (keyless CARTO Voyager street tiles — Google-default-style basemap) with markers re-projected on top.
   const geo = useMemo(() => {
     const wx = (lng, z) => ((lng + 180) / 360) * TILE * Math.pow(2, z);
     const wy = (lat, z) => { const s = Math.min(Math.max(Math.sin((lat * Math.PI) / 180), -0.9999), 0.9999); return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * TILE * Math.pow(2, z); };
@@ -2106,17 +2178,17 @@ function MapView({ home, all, radiusMi, reroute, recoKey, interactive = false, o
   const homeReco = !reroute;
 
   return (
-    <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Satellite map of your home location and nearby pickup jurisdictions within the selected radius" style={{ width: "100%", height: "auto", display: "block", borderRadius: 7, background: "#0B1F17", touchAction: interactive ? "none" : undefined, cursor: interactive ? "grab" : "default" }} onWheel={onWheel} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}>
+    <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Street map of your home location and nearby pickup jurisdictions within the selected radius" style={{ width: "100%", height: "auto", display: "block", borderRadius: 7, background: "#EAE7E1", touchAction: interactive ? "none" : undefined, cursor: interactive ? "grab" : "default" }} onWheel={onWheel} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}>
       <defs><clipPath id="mvclip"><rect x="0" y="0" width={W} height={H} rx="7" /></clipPath></defs>
       <g clipPath="url(#mvclip)">
       {tiles.map((t) => (
-        <image key={t.tx + "_" + t.ty} href={`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${t.ty}/${t.tx}`} x={t.sx} y={t.sy} width={TILE + 0.6} height={TILE + 0.6} preserveAspectRatio="none" />
+        <image key={t.tx + "_" + t.ty} href={`https://basemaps.cartocdn.com/rastertiles/voyager/${z}/${t.tx}/${t.ty}@2x.png`} x={t.sx} y={t.sy} width={TILE + 0.6} height={TILE + 0.6} preserveAspectRatio="none" />
       ))}
-      <rect x="0" y="0" width={W} height={H} fill="rgba(7,18,13,0.22)" />
-      <circle cx={homeS.x} cy={homeS.y} r={ringR} fill="rgba(255,255,255,0.04)" stroke="#FFFFFF" strokeWidth="1.3" strokeDasharray="4 6" opacity="0.7" />
-      <text x={homeS.x} y={homeS.y - ringR - 7} textAnchor="middle" fontFamily="IBM Plex Mono" fontSize="11" fill="#FFFFFF" stroke="#06231B" strokeWidth="2.6" paintOrder="stroke" strokeLinejoin="round">{radiusMi} mi</text>
+      <rect x="0" y="0" width={W} height={H} fill="rgba(255,255,255,0.06)" />
+      <circle cx={homeS.x} cy={homeS.y} r={ringR} fill="rgba(21,127,67,0.06)" stroke="#157F43" strokeWidth="1.5" strokeDasharray="4 6" opacity="0.85" />
+      <text x={homeS.x} y={homeS.y - ringR - 7} textAnchor="middle" fontFamily="IBM Plex Mono" fontSize="11" fill="#10221A" stroke="#FFFFFF" strokeWidth="3" paintOrder="stroke" strokeLinejoin="round">{radiusMi} mi</text>
 
-      {cands.map((o) => { const c = proj(o), isReco = reroute && keyOf(o) === recoKey; return <path key={"r" + keyOf(o)} d={route(homeS, c)} fill="none" stroke={isReco ? "#2BE3B4" : "#FFFFFF"} strokeWidth={isReco ? 2.6 : 1.3} strokeDasharray="5 5" opacity={isReco ? 0.95 : 0.5} style={isReco ? { animation: "dash 24s linear infinite" } : undefined} />; })}
+      {cands.map((o) => { const c = proj(o), isReco = reroute && keyOf(o) === recoKey; return <path key={"r" + keyOf(o)} d={route(homeS, c)} fill="none" stroke={isReco ? "#0E9C66" : "#5C6E64"} strokeWidth={isReco ? 2.8 : 1.4} strokeDasharray="5 5" opacity={isReco ? 0.95 : 0.55} style={isReco ? { animation: "dash 24s linear infinite" } : undefined} />; })}
 
       {cands.map((o) => {
         const c = proj(o), isReco = reroute && keyOf(o) === recoKey, free = o.taxFree;
@@ -2130,32 +2202,32 @@ function MapView({ home, all, radiusMi, reroute, recoKey, interactive = false, o
             onMouseEnter={() => setFocus(keyOf(o))} onMouseLeave={() => setFocus(null)}
             onClick={(e) => { e.stopPropagation(); if (interactive && onDetails) onDetails(o); else setFocus(focus === keyOf(o) ? null : keyOf(o)); }}>
             {isReco && <rect x={-pw / 2 - 3} y="-15" width={pw + 6} height="30" rx="15" fill="none" stroke="#2BE3B4" strokeWidth="2" opacity="0.6" />}
-            <rect x={-pw / 2} y="-12" width={pw} height="24" rx="12" fill={fill} stroke={isReco ? "#0B6B47" : "#0E9C66"} strokeWidth="1.5" />
+            <rect x={-pw / 2} y="-12" width={pw} height="24" rx="12" fill={fill} stroke={isReco ? "#0B6B47" : "#0E9C66"} strokeWidth="1.5" style={{ filter: "drop-shadow(0 2px 3px rgba(16,34,26,.28))" }} />
             <text x="0" y="4.5" textAnchor="middle" fontFamily="Archivo" fontSize="11.5" fontWeight="800" fill={txt}>{lbl}</text>
-            <text x="0" y="30" textAnchor="middle" fontFamily="Archivo" fontSize="9.5" fontWeight="700" fill="#FFFFFF" stroke="#06231B" strokeWidth="2.6" paintOrder="stroke" strokeLinejoin="round">{o.name.split(/[,\u00b7]/)[0].trim()}</text>
+            <text x="0" y="30" textAnchor="middle" fontFamily="Archivo" fontSize="9.5" fontWeight="700" fill="#10221A" stroke="#FFFFFF" strokeWidth="3" paintOrder="stroke" strokeLinejoin="round">{o.name.split(/[,\u00b7]/)[0].trim()}</text>
           </g>
         );
       })}
 
       <g transform={`translate(${homeS.x},${homeS.y})`}>
-        {homeReco && <circle r="14" fill="none" stroke="#FFFFFF" strokeWidth="2" opacity="0.5" />}
-        <circle r="11" fill="none" stroke="#FFFFFF" strokeWidth="1.5" opacity="0.55" />
-        <rect x="-6" y="-6" width="12" height="12" transform="rotate(45)" fill="#FFFFFF" stroke="#06231B" strokeWidth="1.5" />
-        <text x="0" y="-18" textAnchor="middle" fontFamily="Archivo" fontSize="11.5" fontWeight="700" fill="#FFFFFF" stroke="#06231B" strokeWidth="3.5" paintOrder="stroke" strokeLinejoin="round">{home.name.split(/[,\u00b7]/)[0].trim()}</text>
+        {homeReco && <circle r="14" fill="none" stroke="#10221A" strokeWidth="2" opacity="0.35" />}
+        <circle r="11" fill="none" stroke="#10221A" strokeWidth="1.5" opacity="0.4" />
+        <rect x="-6" y="-6" width="12" height="12" transform="rotate(45)" fill="#10221A" stroke="#FFFFFF" strokeWidth="1.5" />
+        <text x="0" y="-18" textAnchor="middle" fontFamily="Archivo" fontSize="11.5" fontWeight="700" fill="#10221A" stroke="#FFFFFF" strokeWidth="3.5" paintOrder="stroke" strokeLinejoin="round">{home.name.split(/[,\u00b7]/)[0].trim()}</text>
       </g>
 
       {recoCand && (() => { const c = proj(recoCand); return (
         <g transform={`translate(${c.x},${c.y - 26})`} pointerEvents="none">
-          <path d="M -5 9 L 0 15 L 5 9 Z" fill="#1FA254" />
-          <rect x="-47" y="-10" width="94" height="19" rx="9.5" fill="#1FA254" />
+          <path d="M -5 9 L 0 15 L 5 9 Z" fill="#157F43" />
+          <rect x="-47" y="-10" width="94" height="19" rx="9.5" fill="#157F43" />
           <text x="0" y="3.5" textAnchor="middle" fontFamily="Archivo" fontSize="9.5" fontWeight="700" fill="#FFFFFF" letterSpacing="0.6">PICK UP HERE</text>
         </g>
       ); })()}
       {homeReco && (
         <g transform={`translate(${homeS.x},${homeS.y + 28})`} pointerEvents="none">
-          <path d="M -5 -9 L 0 -15 L 5 -9 Z" fill="#FFFFFF" />
-          <rect x="-39" y="-9" width="78" height="19" rx="9.5" fill="#FFFFFF" />
-          <text x="0" y="4.5" textAnchor="middle" fontFamily="Archivo" fontSize="9.5" fontWeight="700" fill="#0B1F17" letterSpacing="0.6">SHIP HERE</text>
+          <path d="M -5 -9 L 0 -15 L 5 -9 Z" fill="#10221A" />
+          <rect x="-39" y="-9" width="78" height="19" rx="9.5" fill="#10221A" />
+          <text x="0" y="4.5" textAnchor="middle" fontFamily="Archivo" fontSize="9.5" fontWeight="700" fill="#FFFFFF" letterSpacing="0.6">SHIP HERE</text>
         </g>
       )}
 
@@ -2165,26 +2237,27 @@ function MapView({ home, all, radiusMi, reroute, recoKey, interactive = false, o
         const delta = home.landed - focusObj.landed, good = delta > 0;
         return (
           <g pointerEvents="none">
-            <rect x={bx} y={by} width="154" height="64" rx="6" fill="#FFFFFF" stroke="#D8E0DA" strokeWidth="1" style={{ filter: "drop-shadow(0 8px 18px rgba(16,34,26,.25))" }} />
+            <rect x={bx} y={by} width="154" height="64" rx="6" fill="#FFFFFF" stroke="#BFCAC2" strokeWidth="1" style={{ filter: "drop-shadow(0 8px 18px rgba(16,34,26,.25))" }} />
             <text x={bx + 12} y={by + 19} fontFamily="Fraunces" fontSize="13.5" fontWeight="600" fill="#10221A">{focusObj.name}</text>
             <text x={bx + 12} y={by + 36} fontFamily="IBM Plex Mono" fontSize="11" fill="#6B7B72">{focusObj.taxable ? pct(focusObj.combinedRate) : "exempt"} · {focusObj.miles} mi · {money0(focusObj.landed)}</text>
-            <text x={bx + 12} y={by + 53} fontFamily="IBM Plex Mono" fontSize="12" fontWeight="600" fill={good ? "#1FA254" : "#FF8A70"}>{good ? `saves ${money0(delta)}` : `costs ${money0(-delta)} more`}</text>
+            <text x={bx + 12} y={by + 53} fontFamily="IBM Plex Mono" fontSize="12" fontWeight="600" fill={good ? "#177A3F" : "#C0432A"}>{good ? `saves ${money0(delta)}` : `costs ${money0(-delta)} more`}</text>
           </g>
         );
       })()}
+      <text x="7" y={H - 7} fontFamily="Archivo" fontSize="8.5" fontWeight="600" fill="#5C6E64" stroke="#FFFFFF" strokeWidth="1.8" paintOrder="stroke" strokeLinejoin="round" opacity="0.92" pointerEvents="none">© OpenStreetMap · CARTO</text>
       {interactive && (
         <g data-nopan>
           <g onClick={(e) => { e.stopPropagation(); zoomBy(1); }} style={{ cursor: "pointer" }}>
-            <rect x={W - 46} y="12" width="34" height="34" rx="9" fill="#FFFFFF" opacity="0.96" stroke="#D8E0DA" />
+            <rect x={W - 46} y="12" width="34" height="34" rx="9" fill="#FFFFFF" opacity="0.97" stroke="#9FAEA4" style={{ filter: "drop-shadow(0 2px 4px rgba(16,34,26,.22))" }} />
             <line x1={W - 29} y1="22" x2={W - 29} y2="38" stroke="#10221A" strokeWidth="2.6" strokeLinecap="round" />
             <line x1={W - 37} y1="30" x2={W - 21} y2="30" stroke="#10221A" strokeWidth="2.6" strokeLinecap="round" />
           </g>
           <g onClick={(e) => { e.stopPropagation(); zoomBy(-1); }} style={{ cursor: "pointer" }}>
-            <rect x={W - 46} y="50" width="34" height="34" rx="9" fill="#FFFFFF" opacity="0.96" stroke="#D8E0DA" />
+            <rect x={W - 46} y="50" width="34" height="34" rx="9" fill="#FFFFFF" opacity="0.97" stroke="#9FAEA4" style={{ filter: "drop-shadow(0 2px 4px rgba(16,34,26,.22))" }} />
             <line x1={W - 37} y1="67" x2={W - 21} y2="67" stroke="#10221A" strokeWidth="2.6" strokeLinecap="round" />
           </g>
           <g onClick={(e) => { e.stopPropagation(); setCam(null); }} style={{ cursor: "pointer" }}>
-            <rect x={W - 46} y={H - 46} width="34" height="34" rx="9" fill="#FFFFFF" opacity="0.96" stroke="#D8E0DA" />
+            <rect x={W - 46} y={H - 46} width="34" height="34" rx="9" fill="#FFFFFF" opacity="0.97" stroke="#9FAEA4" style={{ filter: "drop-shadow(0 2px 4px rgba(16,34,26,.22))" }} />
             <circle cx={W - 29} cy={H - 29} r="6" fill="none" stroke="#10221A" strokeWidth="2" />
             <circle cx={W - 29} cy={H - 29} r="1.6" fill="#10221A" />
             <line x1={W - 29} y1={H - 42} x2={W - 29} y2={H - 39} stroke="#10221A" strokeWidth="2" strokeLinecap="round" />
