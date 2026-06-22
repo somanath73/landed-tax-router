@@ -10,7 +10,6 @@ dist
 # Capacitor native projects — regenerate with `npx cap add android` / `npx cap add ios` (see MOBILE.md)
 /android
 /ios
-/resources
 
 # County-rate pipeline inputs/cache (regenerable via scripts/*.mjs; the outputs live in public/)
 scripts/us-counties-raw.json

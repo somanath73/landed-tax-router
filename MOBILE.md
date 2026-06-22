@@ -45,22 +45,24 @@ npm run cap:ios             # opens Xcode (macOS)
 
 ## App icon & splash screen
 
-Stores require a real app icon (no placeholder). Provide a **1024×1024 PNG**:
+A ready-made source icon ships at **`resources/icon.svg`** (the green price-tag mark).
+Capacitor's asset generator needs a **1024×1024 PNG**, so export it once, then generate every size:
 
 ```bash
-mkdir resources
-# put resources/icon.png  (1024x1024)  and optionally resources/splash.png (2732x2732)
+# Export resources/icon.svg -> resources/icon.png at 1024x1024 (any editor, or:)
+#   npx svgexport resources/icon.svg resources/icon.png 1024:1024
 npm i -D @capacitor/assets
 npx capacitor-assets generate          # writes all icon/splash sizes into /android and /ios
 ```
 
-(You can export `public/icon.svg` to a 1024 PNG as a starting point.)
+Optionally add `resources/splash.png` (2732×2732) for a custom launch screen.
 
 ---
 
 ## Permissions (required for the "My location" feature)
 
-The app calls the browser Geolocation API. Declare the OS permission strings or location won't work:
+The native **`@capacitor/geolocation`** plugin is already wired in (the app uses it on device, and the
+browser Geolocation API on the web). You still must declare the OS permission strings or it won't prompt:
 
 - **iOS** — in Xcode, add to `Info.plist`:
   `NSLocationWhenInUseUsageDescription` = "Used to find tax-free pickup locations near you."

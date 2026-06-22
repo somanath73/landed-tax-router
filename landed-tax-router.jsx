@@ -1,4 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { Capacitor } from "@capacitor/core";
+import { Geolocation } from "@capacitor/geolocation";
 import US_STATES from "./us-states.geo.json";
 import FL_COUNTIES from "./fl-counties.geo.json";
 const BASE = import.meta.env.BASE_URL; // "/" locally & on Netlify; "/landed-tax-router/" on GitHub Pages — keeps data fetches correct under a subpath
@@ -15,6 +17,10 @@ const BASE = import.meta.env.BASE_URL; // "/" locally & on Netlify; "/landed-tax
    ========================================================================= */
 const STATE_BASE = { AL:0.04, AK:0.0, AZ:0.056, AR:0.065, CA:0.0725, CO:0.029, CT:0.0635, DE:0.0, DC:0.06, FL:0.06, GA:0.04, HI:0.04, ID:0.06, IL:0.0625, IN:0.07, IA:0.06, KS:0.065, KY:0.06, LA:0.05, ME:0.055, MD:0.06, MA:0.0625, MI:0.06, MN:0.06875, MS:0.07, MO:0.04225, MT:0.0, NE:0.055, NV:0.0685, NH:0.0, NJ:0.06625, NM:0.05, NY:0.04, NC:0.0475, ND:0.05, OH:0.0575, OK:0.045, OR:0.0, PA:0.06, RI:0.07, SC:0.06, SD:0.042, TN:0.07, TX:0.0625, UT:0.061, VT:0.06, VA:0.053, WA:0.065, WV:0.06, WI:0.05, WY:0.04 };
 const NOMAD = new Set(["DE", "MT", "NH", "OR"]); // AK excluded: no state rate but local taxes vary
+// Population-weighted combined state+local averages (Tax Foundation, ~2025) — a far better offline estimate than the
+// state base alone, since most states add local sales tax on top. NOMAD = 0; Florida is still handled exactly per county.
+const STATE_COMBINED = { AL:0.0943, AK:0.0182, AZ:0.0841, AR:0.0946, CA:0.0880, CO:0.0786, CT:0.0635, DE:0.0, DC:0.0600, FL:0.0695, GA:0.0742, HI:0.0450, ID:0.0603, IL:0.0889, IN:0.0700, IA:0.0694, KS:0.0877, KY:0.0600, LA:0.1012, ME:0.0550, MD:0.0600, MA:0.0625, MI:0.0600, MN:0.0813, MS:0.0706, MO:0.0841, MT:0.0, NE:0.0697, NV:0.0824, NH:0.0, NJ:0.0660, NM:0.0763, NY:0.0853, NC:0.0700, ND:0.0705, OH:0.0723, OK:0.0901, OR:0.0, PA:0.0634, RI:0.0700, SC:0.0750, SD:0.0611, TN:0.0956, TX:0.0820, UT:0.0732, VT:0.0637, VA:0.0577, WA:0.0943, WV:0.0657, WI:0.0570, WY:0.0544 };
+const combinedFor = (st) => (NOMAD.has(st) ? 0 : (STATE_COMBINED[st] ?? STATE_BASE[st] ?? null)); // best offline combined estimate
 // Clothing exemptions vary by state — approximate per-item rules (verify against current law before relying on them).
 // full: fully exempt · cap: only the amount over $cap per item is taxable · itemCap: item exempt only if priced under $itemCap.
 const CLOTHING_RULE = { PA: { full: true }, NJ: { full: true }, MN: { full: true }, VT: { full: true }, MA: { cap: 175 }, RI: { cap: 250 }, NY: { itemCap: 110 } };
@@ -101,9 +107,9 @@ function rateFor(geo) {
   const st = geo.state;
   if (NOMAD.has(st)) return { stateRate: 0, surtax: 0, cap: null, precise: true, note: "no sales tax" };
   if (st === "FL") { const ci = FLZ[geo.zip]; if (ci != null) { const c = FLC[ci]; return { stateRate: 0.06, surtax: c[1], cap: 5000, precise: true, note: c[0] + " Co." }; } }
-  const base = STATE_BASE[st];
-  if (base == null) return { stateRate: 0, surtax: 0, cap: null, precise: false, note: "rate unknown — connect tax API" };
-  return { stateRate: base, surtax: 0, cap: st === "FL" ? 5000 : null, precise: false, note: "state base only — local via API" };
+  const est = combinedFor(st);
+  if (est == null) return { stateRate: 0, surtax: 0, cap: null, precise: false, note: "rate unknown — connect tax API" };
+  return { stateRate: est, surtax: 0, cap: null, precise: false, note: "est. combined (state + avg local)" };
 }
 function resolveZip(zip) {
   const z = (zip || "").trim();
@@ -122,7 +128,7 @@ function resolveZip(zip) {
 // ---- Nationwide candidate generation -------------------------------------
 const STATE_NAMES = { AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California", CO: "Colorado", CT: "Connecticut", DE: "Delaware", DC: "District of Columbia", FL: "Florida", GA: "Georgia", HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa", KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland", MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi", MO: "Missouri", MT: "Montana", NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey", NM: "New Mexico", NY: "New York", NC: "North Carolina", ND: "North Dakota", OH: "Ohio", OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina", SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont", VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming" };
 // Combined rate inferable for a whole STATE from offline data (no local detail): no-tax states = 0, else state base.
-const stateBaseCombined = (st) => (NOMAD.has(st) ? 0 : STATE_BASE[st]);
+const stateBaseCombined = (st) => combinedFor(st);
 const candKeyOf = (c) => c.name + (c.zip || ""); // stable id for a candidate (matches keyOf used in the views)
 // Nearest ZIP3-prefix point in each *lower-rate* state reachable within radiusMi. State-level resolution
 // (prefix centroids); exact rooftop coords + local rates would come from a tax API in production.
@@ -569,41 +575,61 @@ export default function Landed() {
     const k = geo.zip || geo.label;
     setUserPoints((p) => [...p.filter((x) => (x.zip || x.label) !== k), { ...geo, rate }]); setPickInput("");
   }
-  // Detect the user's location via the browser Geolocation API (prompts for permission) and resolve it to a home.
-  function locateMe(manual) {
-    if (!navigator.geolocation) { if (manual) setGeoErr("Location isn't available on this device."); return; }
+  // Turn GPS coords into a resolved home. Shared by the native and web geolocation paths. Returns false if it couldn't.
+  async function applyCoords(my, lat, lng) {
+    const rev = await reverseZip(lat, lng); // real ZIP from a keyless reverse geocoder
+    const geo = rev && rev.zip
+      ? { zip: rev.zip, city: rev.city || null, state: rev.state, lat, lng, county: undefined, label: rev.city ? `${rev.city}, ${rev.state}` : rev.zip, precision: "exact" }
+      : await taxProvider.reverseGeocode(lat, lng);
+    const rate = geo ? await taxProvider.getRate(geo) : null;
+    if (my !== reqRef.current) return true; // superseded — treat as handled
+    if (!geo || !rate) return false;
+    setHome({ geo, rate }); setGeoPerm("granted");
+    if (geo.zip) setZipInput(geo.zip); else if (geo.city) setZipInput(geo.city);
+    return true;
+  }
+  function geoError(manual, denied) {
+    if (denied) setGeoPerm("denied");
+    if (!manual) return;
+    const framed = (() => { try { return window.self !== window.top; } catch { return true; } })();
+    setGeoErr(
+      denied
+        ? (framed
+            ? "This embedded preview blocks location. Open the site in its own browser tab — or just type a ZIP / city below."
+            : "Location is off for this app. Allow it in Settings (or the browser's site settings), then try again — or just type a ZIP / city.")
+        : "Couldn't pin your location — type a ZIP or city instead."
+    );
+  }
+  // Detect the user's location: the native Capacitor Geolocation plugin in the iOS/Android app, the browser API on the web.
+  async function locateMe(manual) {
     setGeoErr(""); setResolving(true);
     const my = ++reqRef.current;
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await Geolocation.requestPermissions();
+        const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: false, timeout: 8000 });
+        if (my !== reqRef.current) return;
+        const ok = await applyCoords(my, pos.coords.latitude, pos.coords.longitude);
+        if (my !== reqRef.current) return;
+        setResolving(false);
+        if (!ok) geoError(manual, false);
+      } catch (err) {
+        if (my !== reqRef.current) return;
+        setResolving(false);
+        geoError(manual, !!(err && (err.code === 1 || /denied|permission/i.test(String((err && err.message) || err)))));
+      }
+      return;
+    }
+    if (!navigator.geolocation) { setResolving(false); if (manual) setGeoErr("Location isn't available on this device."); return; }
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         if (my !== reqRef.current) return;
-        const { latitude: lat, longitude: lng } = pos.coords;
-        const rev = await reverseZip(lat, lng); // real ZIP from a keyless reverse geocoder
-        const geo = rev && rev.zip
-          ? { zip: rev.zip, city: rev.city || null, state: rev.state, lat, lng, county: undefined, label: rev.city ? `${rev.city}, ${rev.state}` : rev.zip, precision: "exact" }
-          : await taxProvider.reverseGeocode(lat, lng);
-        const rate = geo ? await taxProvider.getRate(geo) : null;
-        if (my !== reqRef.current) return;
-        if (!geo || !rate) { setResolving(false); if (manual) setGeoErr("Couldn't pin your location — enter a ZIP or city."); return; }
-        setHome({ geo, rate }); setGeoPerm("granted");
-        if (geo.zip) setZipInput(geo.zip); else if (geo.city) setZipInput(geo.city);
-        setResolving(false);
-      },
-      (err) => {
+        const ok = await applyCoords(my, pos.coords.latitude, pos.coords.longitude);
         if (my !== reqRef.current) return;
         setResolving(false);
-        const denied = err && err.code === 1;
-        if (denied) setGeoPerm("denied");
-        if (!manual) return;
-        const framed = (() => { try { return window.self !== window.top; } catch { return true; } })();
-        setGeoErr(
-          denied
-            ? (framed
-                ? "This embedded preview blocks location. Open the site in its own browser tab — or just type a ZIP / city below."
-                : "Location is off for this site. Allow it in the browser's site settings (tap the lock icon in the address bar), then reload — or just type a ZIP / city.")
-            : "Couldn't pin your location — type a ZIP or city instead."
-        );
+        if (!ok && manual) setGeoErr("Couldn't pin your location — enter a ZIP or city.");
       },
+      (err) => { if (my !== reqRef.current) return; setResolving(false); geoError(manual, !!(err && err.code === 1)); },
       { enableHighAccuracy: false, timeout: 8000, maximumAge: 600000 }
     );
   }
@@ -1516,7 +1542,7 @@ export default function Landed() {
 
           <details className="foot">
             <summary>Data sources & accuracy · not tax advice</summary>
-            <p>Florida ZIPs carry real county surtaxes and the 0% no-tax states are exact; elsewhere only the state base shows (flagged <i>est</i>) until a rooftop tax API is connected. Distances and routes are estimates. Not tax advice.</p>
+            <p>Florida is exact per county and the 0% no-tax states are exact. Elsewhere we show a population-weighted <b>combined</b> average (state + typical local), flagged <i>est</i> — connect a rooftop tax API for the exact local rate at an address. Distances and routes are estimates. Not tax advice.</p>
           </details>
         </>)}
 
@@ -1578,8 +1604,7 @@ export default function Landed() {
 // ---- US sales-tax rates map ----------------------------------------------
 const ABBR_BY_NAME = Object.fromEntries(Object.entries(STATE_NAMES).map(([a, n]) => [n, a]));
 const INSET_STATES = ["AK", "HI", "DC", "PR"]; // remote/tiny — shown as chips, not in the contiguous projection
-// 2025 population-weighted combined state+local averages (Tax Foundation, as of Jan 1 2025). NOMAD states = 0; AK 1.82% is local-only.
-const STATE_COMBINED = { AL:0.0943, AK:0.0182, AZ:0.0841, AR:0.0946, CA:0.0880, CO:0.0786, CT:0.0635, DE:0.0, DC:0.0600, FL:0.0695, GA:0.0742, HI:0.0450, ID:0.0603, IL:0.0889, IN:0.0700, IA:0.0694, KS:0.0877, KY:0.0600, LA:0.1012, ME:0.0550, MD:0.0600, MA:0.0625, MI:0.0600, MN:0.0813, MS:0.0706, MO:0.0841, MT:0.0, NE:0.0697, NV:0.0824, NH:0.0, NJ:0.0660, NM:0.0763, NY:0.0853, NC:0.0700, ND:0.0705, OH:0.0723, OK:0.0901, OR:0.0, PA:0.0634, RI:0.0700, SC:0.0750, SD:0.0611, TN:0.0956, TX:0.0820, UT:0.0732, VT:0.0637, VA:0.0577, WA:0.0943, WV:0.0657, WI:0.0570, WY:0.0544 };
+// (combined state+local averages — STATE_COMBINED — are defined near STATE_BASE up top so the router uses them too.)
 const flNorm = (s) => s.toLowerCase().replace(/[^a-z]/g, "");
 const FL_SURTAX_BY_NAME = Object.fromEntries(FLC.map(([n, sur]) => [flNorm(n), sur])); // county name → discretionary surtax
 // Representative city ZIP per state — TaxJar needs a ZIP, so the map fetches ONE live rate here for a selected state.
