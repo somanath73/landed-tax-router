@@ -148,6 +148,20 @@ const nearbyStateCandidates = (home, radiusMi, homeCombined, skipStates) => {
     precise: NOMAD.has(st), taxFree: NOMAD.has(st), generic: true,
   }));
 };
+// Nearby lower-tax COUNTIES (within radius) with exact county rates — surfaces in-state options the state grid misses
+// (e.g. Tampa → Brooksville). Skips no-tax states (anchors cover those) and anything not strictly cheaper than home.
+const nearbyCountyCandidates = (home, radiusMi, homeCombined, counties) => {
+  if (!counties || !counties.length) return [];
+  const out = [];
+  for (const c of counties) {
+    if (!(c.rate > 0) || c.rate >= homeCombined - 0.0005) continue; // only genuinely lower, nonzero
+    const d = haversine(home, c);
+    if (d > radiusMi) continue;
+    out.push({ name: c.city + ", " + c.st, state: c.st, lat: c.lat, lng: c.lng, stateRate: c.rate, surtax: 0, cap: null, precise: true, taxFree: false, county: true, _d: d });
+  }
+  out.sort((a, b) => a._d - b._d);
+  return out.slice(0, 6);
+};
 // Nearest no-sales-tax point anywhere — anchors give nice city names, the ZIP3 grid covers everywhere else. Ignores radius.
 const nearestNoTax = (home) => {
   let best = null;
@@ -374,6 +388,16 @@ async function countyRateForZip(zip) {
   return r == null ? null : { stateRate: r, surtax: 0, cap: null, precise: true, note: "county rate" };
 }
 
+let _countiesPromise = null;
+// Bundled representative county points (lat/lng/rate/city) for nearby lower-tax candidate generation.
+function loadCounties() {
+  if (!_countiesPromise) _countiesPromise = fetch(BASE + "counties.json")
+    .then((r) => (r.ok ? r.json() : {}))
+    .then((o) => Object.values(o).map((a) => ({ lat: a[0], lng: a[1], rate: a[2], city: a[3], st: a[4] })))
+    .catch(() => []);
+  return _countiesPromise;
+}
+
 // Tween a number toward its target with rAF (ease-out cubic) so the verdict figure visibly reacts to input
 // changes. Starts at the target on mount (no entrance tween — the CSS pop covers that). Honors reduced motion.
 function useCountUp(target, dur = 600) {
@@ -447,6 +471,7 @@ export default function Landed() {
   const [resolving, setResolving] = useState(false);
   const [geoPerm, setGeoPerm] = useState("");
   const [candRates, setCandRates] = useState({});
+  const [counties, setCounties] = useState(null); // bundled county points → nearby lower-tax candidates
   const reqRef = useRef(0);
   const candReqRef = useRef(0);
   const homeGeo = home.geo;
@@ -660,6 +685,7 @@ export default function Landed() {
     );
   }
   useEffect(() => {
+    loadCounties().then(setCounties); // nearby lower-tax county candidates
     if (taxProvider.name !== "offline") resolveHome(home.geo.zip); // enrich the default home via API when configured
     // Gentle: only auto-locate if permission was already granted; otherwise wait for the 📍 tap.
     if (navigator.permissions && navigator.permissions.query) {
@@ -715,6 +741,7 @@ export default function Landed() {
       // Candidate rates are offline state-base; production batches these through taxProvider.getRate
       // (or a rates-by-area endpoint) the same way home/pickups resolve. See TAX PROVIDER above.
       ...nearbyStateCandidates(homeGeo, radius, homeCombined, anchorStates),
+      ...nearbyCountyCandidates(homeGeo, radius, homeCombined, counties),
       ...userPoints.map((u) => { const r = u.rate || rateFor(u); return { name: u.label, state: u.state, lat: u.lat, lng: u.lng, zip: u.zip, custom: true, stateRate: r.stateRate, surtax: r.surtax, cap: r.cap, precise: r.precise, taxFree: NOMAD.has(u.state) }; }),
     ];
     // Overlay precise API rates onto the est (generic) candidates when a live provider has fetched them; no-op offline.
@@ -725,10 +752,14 @@ export default function Landed() {
     }).filter((x) => (x.d > 1.5 || x.p.custom) && x.d <= radius)
       .map((x) => calc(x.p, x.d, false)).sort((a, b) => a.landed - b.landed);
     // Keep the map/ledger legible: show only the cheapest few generic state points (anchors & user picks always stay).
+    const seenN = new Set();
+    const deduped = ranked
+      .filter((c) => { if (seenN.has(c.name)) return false; seenN.add(c.name); return true; }) // drop same-named dups (anchor vs county point)
+      .filter((c) => c.combinedRate < homeOpt.combinedRate - 1e-4); // only genuinely lower-tax options than home
     const MAX_GENERIC = 8;
-    const genericRanked = ranked.filter((c) => c.generic);
+    const genericRanked = deduped.filter((c) => c.generic);
     const dropped = new Set(genericRanked.slice(MAX_GENERIC));
-    const cands = ranked.filter((c) => !dropped.has(c));
+    const cands = deduped.filter((c) => !dropped.has(c));
     const genericCut = Math.max(0, genericRanked.length - MAX_GENERIC);
 
     const all = [homeOpt, ...cands];
@@ -743,7 +774,7 @@ export default function Landed() {
     const nearestFree = nearestNoTax(homeGeo);
 
     return { homeOpt, all, cands, bestAlt, savings, taxOnly, gross, reroute, crossState, max, min, nearestFree, genericCut };
-  }, [homeGeo, homeRate, userPoints, price, category, freeShip, costPerMile, timeValue, minSavings, pickupFee, radius]);
+  }, [homeGeo, homeRate, userPoints, price, category, freeShip, costPerMile, timeValue, minSavings, pickupFee, radius, counties]);
 
   const { homeOpt, all, cands, bestAlt, savings, taxOnly, gross, reroute, crossState, max, min, nearestFree, genericCut } = result;
   const homeFree = NOMAD.has(homeGeo.state);
