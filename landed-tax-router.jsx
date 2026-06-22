@@ -382,6 +382,8 @@ const SHOP_Q = { general: "stores", clothing: "clothing store", groceries: "groc
 // Neutral Google Shopping seed for the ship-home verdict (aggregator, no retailer/inventory claim). "" = open Shopping with no query.
 // general/rx open Shopping unseeded — a "pharmacy" product search would mislead for prescriptions (you fill those, not "shop" them).
 const SHOP_ONLINE = { general: "", clothing: "clothing", groceries: "groceries", rx: "" };
+// Voluntary "buy me a coffee" tip link (set to your own handle/URL).
+const DONATE_URL = "https://www.buymeacoffee.com/somanath73";
 
 const SCENARIOS = [
   { id: "laptop", e: "💻", l: "$1,800 laptop in Boston", sub: "Tax-free NH is a short drive", price: 1800, cat: "general", zip: "02108" },
@@ -1067,6 +1069,13 @@ export default function Landed() {
         .hint{font-size:12px;color:var(--muted);margin:-2px 0 13px;}
         .notice{background:#FFF7E8;border:1px solid #F1E1BE;border-radius:13px;padding:13px 14px;font-size:12.5px;font-weight:600;color:#8A6516;line-height:1.45;}
         .about{text-align:center;font-size:11.5px;color:var(--muted);padding:8px 16px 4px;line-height:1.5;}
+        .donate{display:flex;align-items:center;gap:12px;width:100%;text-decoration:none;background:#FFF8EC;border:1px solid #F1DFB6;border-radius:16px;padding:14px;cursor:pointer;}
+        .donate:active{transform:translateY(1px);}
+        .donate-ic{flex:none;width:42px;height:42px;border-radius:12px;background:#FFE9C2;display:grid;place-items:center;font-size:22px;}
+        .donate-b{flex:1;min-width:0;display:flex;flex-direction:column;}
+        .donate-t{font-family:'Archivo',sans-serif;font-weight:800;font-size:14.5px;color:#7A5A12;}
+        .donate-d{font-size:12px;color:#9A7A2E;margin-top:2px;line-height:1.35;}
+        .donate-arrow{flex:none;color:#B9831C;font-weight:800;font-size:15px;}
         .optgroup{display:flex;flex-direction:column;gap:10px;}
         .optcard{display:flex;align-items:center;gap:13px;width:100%;text-align:left;background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:14px;cursor:pointer;}
         .optcard[data-on=true]{border-color:var(--go);background:var(--go-soft);}
@@ -1315,7 +1324,7 @@ export default function Landed() {
           </div>
 
           {view !== "ledger" && (
-            <div className="uswrap"><MapView home={homeOpt} all={all} radiusMi={radius} reroute={reroute} recoKey={reroute && bestAlt ? bestAlt.name + (bestAlt.zip || "") : ""} /></div>
+            <div className="uswrap"><MapView home={homeOpt} all={all} radiusMi={radius} reroute={reroute} recoKey={reroute && bestAlt ? bestAlt.name + (bestAlt.zip || "") : ""} interactive /></div>
           )}
 
           <div className="sec-h">Nearby Tax-Free Locations</div>
@@ -1414,6 +1423,12 @@ export default function Landed() {
             </div>
           )}
 
+          <a className="donate" href={DONATE_URL} target="_blank" rel="noopener noreferrer">
+            <span className="donate-ic" aria-hidden="true">☕</span>
+            <span className="donate-b"><span className="donate-t">{youCouldSave > 0 ? `Saved you ${money(youCouldSave)}? Buy me a coffee` : "Find this useful? Buy me a coffee"}</span><span className="donate-d">Tips keep Sales Tax Saver free and ad-free — thank you!</span></span>
+            <span className="donate-arrow" aria-hidden="true">↗</span>
+          </a>
+
           <details className="foot">
             <summary>Data sources & accuracy · not tax advice</summary>
             <p>Florida ZIPs carry real county surtaxes and the 0% no-tax states are exact; elsewhere only the state base shows (flagged <i>est</i>) until a rooftop tax API is connected. Distances and routes are estimates. Not tax advice.</p>
@@ -1441,6 +1456,12 @@ export default function Landed() {
             {pickErr && <div className="errline">{pickErr}</div>}
             {userPoints.length > 0 && <div className="chiplist">{userPoints.map((u) => <span key={u.zip || u.label} className="upchip">{u.label}<button type="button" aria-label={"Remove " + u.label} onClick={() => setUserPoints((p) => p.filter((x) => (x.zip || x.label) !== (u.zip || u.label)))}>×</button></span>)}</div>}
           </div>
+
+          <a className="donate" href={DONATE_URL} target="_blank" rel="noopener noreferrer">
+            <span className="donate-ic" aria-hidden="true">☕</span>
+            <span className="donate-b"><span className="donate-t">Support Sales Tax Saver</span><span className="donate-d">Buy me a coffee if the app saved you money.</span></span>
+            <span className="donate-arrow" aria-hidden="true">↗</span>
+          </a>
 
           <div className="about">Sales Tax Saver · the true cost of buying online — price + sales tax + gas + time.</div>
         </>)}
@@ -1728,33 +1749,53 @@ function RatesDetail({ ab, mode, flCounties, liveRate }) {
 }
 
 // ---- Map view ------------------------------------------------------------
-function MapView({ home, all, radiusMi, reroute, recoKey }) {
+function MapView({ home, all, radiusMi, reroute, recoKey, interactive = false }) {
   const W = 640, H = 400, TILE = 256;
   const [focus, setFocus] = useState(null);
+  const [cam, setCam] = useState(null); // {lat,lng,z} pan/zoom override; null = auto-fit on home
+  const svgRef = useRef(null);
+  const drag = useRef(null);
   const cands = all.filter((o) => o.tag !== "home");
   const keyOf = (o) => o.name + (o.zip || "");
+  useEffect(() => { setCam(null); }, [home.lat, home.lng, radiusMi]); // recenter when home or radius changes
 
   // Web-Mercator tile mosaic (keyless Esri World Imagery satellite tiles) with markers re-projected on top.
   const geo = useMemo(() => {
-    const lat0 = home.lat, lng0 = home.lng, latRad = (lat0 * Math.PI) / 180;
     const wx = (lng, z) => ((lng + 180) / 360) * TILE * Math.pow(2, z);
     const wy = (lat, z) => { const s = Math.min(Math.max(Math.sin((lat * Math.PI) / 180), -0.9999), 0.9999); return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * TILE * Math.pow(2, z); };
+    const ilng = (px, z) => (px / (TILE * Math.pow(2, z))) * 360 - 180;
+    const ilat = (py, z) => (Math.atan(Math.sinh(Math.PI * (1 - 2 * (py / (TILE * Math.pow(2, z)))))) * 180) / Math.PI;
     const radiusM = Math.max(1, radiusMi) * 1609.34;
     const targetPx = 0.42 * Math.min(W, H); // fit the radius ring to ~42% of the short side
-    let z = Math.log2((targetPx * 156543.03392 * Math.cos(latRad)) / radiusM);
-    z = Math.max(3, Math.min(12, Math.round(z)));
+    let baseZ = Math.log2((targetPx * 156543.03392 * Math.cos((home.lat * Math.PI) / 180)) / radiusM);
+    baseZ = Math.max(3, Math.min(12, Math.round(baseZ)));
+    const z = cam ? cam.z : baseZ;
+    const cLat = cam ? cam.lat : home.lat, cLng = cam ? cam.lng : home.lng;
     const n = Math.pow(2, z);
-    const originX = wx(lng0, z) - W / 2, originY = wy(lat0, z) - H / 2; // world px at container (0,0)
+    const originX = wx(cLng, z) - W / 2, originY = wy(cLat, z) - H / 2; // world px at container (0,0)
     const proj = (p) => ({ x: wx(p.lng, z) - originX, y: wy(p.lat, z) - originY });
-    const ringR = (radiusM * n) / (156543.03392 * Math.cos(latRad));
+    const ringR = (radiusM * n) / (156543.03392 * Math.cos((home.lat * Math.PI) / 180));
     const tiles = [];
     for (let tx = Math.floor(originX / TILE); tx <= Math.floor((originX + W) / TILE); tx++)
       for (let ty = Math.floor(originY / TILE); ty <= Math.floor((originY + H) / TILE); ty++)
         if (tx >= 0 && ty >= 0 && tx < n && ty < n) tiles.push({ tx, ty, sx: tx * TILE - originX, sy: ty * TILE - originY });
-    return { proj, homeS: proj(home), ringR, z, tiles };
-  }, [home, all, radiusMi]);
+    return { proj, homeS: proj(home), ringR, z, tiles, wx, wy, ilng, ilat, originX, originY };
+  }, [home, all, radiusMi, cam]);
 
-  const { proj, homeS, ringR, z, tiles } = geo;
+  const { proj, homeS, ringR, z, tiles, wx, wy, ilng, ilat, originX, originY } = geo;
+  const evVb = (e) => { const r = svgRef.current.getBoundingClientRect(); return { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H }; };
+  const zoomBy = (d, vb) => {
+    const nz = Math.max(3, Math.min(17, z + d));
+    if (nz === z) return;
+    const p = vb || { x: W / 2, y: H / 2 };
+    const lng = ilng(p.x + originX, z), lat = ilat(p.y + originY, z);
+    setCam({ z: nz, lng: ilng(wx(lng, nz) - p.x + W / 2, nz), lat: ilat(wy(lat, nz) - p.y + H / 2, nz) });
+  };
+  const onWheel = (e) => { if (!interactive) return; e.preventDefault(); zoomBy(e.deltaY < 0 ? 1 : -1, evVb(e)); };
+  const onDown = (e) => { if (!interactive || (e.target.closest && e.target.closest("[data-nopan]"))) return; drag.current = { x: e.clientX, y: e.clientY, lat: cam ? cam.lat : home.lat, lng: cam ? cam.lng : home.lng, moved: false }; if (e.currentTarget.setPointerCapture) e.currentTarget.setPointerCapture(e.pointerId); };
+  const onMove = (e) => { if (!interactive || !drag.current) return; const r = svgRef.current.getBoundingClientRect(); const dvx = ((e.clientX - drag.current.x) / r.width) * W, dvy = ((e.clientY - drag.current.y) / r.height) * H; if (Math.abs(dvx) + Math.abs(dvy) > 3) drag.current.moved = true; setCam({ z, lng: ilng(wx(drag.current.lng, z) - dvx, z), lat: ilat(wy(drag.current.lat, z) - dvy, z) }); };
+  const onUp = () => { if (!interactive || !drag.current) return; const moved = drag.current.moved; drag.current = null; if (!moved) setFocus(null); };
+
   const route = (a, b) => {
     const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1, off = len * 0.13;
     return `M ${a.x} ${a.y} Q ${mx - (dy / len) * off} ${my + (dx / len) * off} ${b.x} ${b.y}`;
@@ -1764,7 +1805,7 @@ function MapView({ home, all, radiusMi, reroute, recoKey }) {
   const homeReco = !reroute;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Satellite map of your home location and nearby pickup jurisdictions within the selected radius" style={{ width: "100%", height: "auto", display: "block", borderRadius: 7, background: "#0B1F17" }} onClick={() => setFocus(null)}>
+    <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Satellite map of your home location and nearby pickup jurisdictions within the selected radius" style={{ width: "100%", height: "auto", display: "block", borderRadius: 7, background: "#0B1F17", touchAction: interactive ? "none" : undefined, cursor: interactive ? "grab" : "default" }} onWheel={onWheel} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}>
       <defs><clipPath id="mvclip"><rect x="0" y="0" width={W} height={H} rx="7" /></clipPath></defs>
       <g clipPath="url(#mvclip)">
       {tiles.map((t) => (
@@ -1779,7 +1820,7 @@ function MapView({ home, all, radiusMi, reroute, recoKey }) {
       {cands.map((o) => {
         const c = proj(o), isReco = reroute && keyOf(o) === recoKey, free = o.taxFree;
         return (
-          <g key={"p" + keyOf(o)} transform={`translate(${c.x},${c.y})`} style={{ cursor: "pointer" }} opacity={isReco ? 1 : 0.92}
+          <g key={"p" + keyOf(o)} data-nopan transform={`translate(${c.x},${c.y})`} style={{ cursor: "pointer" }} opacity={isReco ? 1 : 0.92}
             onMouseEnter={() => setFocus(keyOf(o))} onMouseLeave={() => setFocus(null)}
             onClick={(e) => { e.stopPropagation(); setFocus(focus === keyOf(o) ? null : keyOf(o)); }}>
             {isReco && <circle r="14" fill="none" stroke="#2BE3B4" strokeWidth="2" opacity="0.6" />}
@@ -1827,6 +1868,19 @@ function MapView({ home, all, radiusMi, reroute, recoKey }) {
           </g>
         );
       })()}
+      {interactive && (
+        <g data-nopan>
+          <g onClick={(e) => { e.stopPropagation(); zoomBy(1); }} style={{ cursor: "pointer" }}>
+            <rect x={W - 46} y="12" width="34" height="34" rx="9" fill="#FFFFFF" opacity="0.96" stroke="#D8E0DA" />
+            <line x1={W - 29} y1="22" x2={W - 29} y2="38" stroke="#10221A" strokeWidth="2.6" strokeLinecap="round" />
+            <line x1={W - 37} y1="30" x2={W - 21} y2="30" stroke="#10221A" strokeWidth="2.6" strokeLinecap="round" />
+          </g>
+          <g onClick={(e) => { e.stopPropagation(); zoomBy(-1); }} style={{ cursor: "pointer" }}>
+            <rect x={W - 46} y="50" width="34" height="34" rx="9" fill="#FFFFFF" opacity="0.96" stroke="#D8E0DA" />
+            <line x1={W - 37} y1="67" x2={W - 21} y2="67" stroke="#10221A" strokeWidth="2.6" strokeLinecap="round" />
+          </g>
+        </g>
+      )}
       </g>
     </svg>
   );
