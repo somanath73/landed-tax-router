@@ -1599,7 +1599,7 @@ function RatesMap() {
           <button type="button" role="tab" aria-selected={mode === "combined"} data-on={mode === "combined"} onClick={() => setMode("combined")}>Combined</button>
           <button type="button" role="tab" aria-selected={mode === "base"} data-on={mode === "base"} onClick={() => setMode("base")}>State base</button>
         </div>
-        <span className={"rm-livetag" + (live ? " on" : "")}>{live ? "● live rates on" : "○ live rates off"}</span>
+        {live && <span className="rm-livetag on">● live rates</span>}
       </div>
 
       <div className="rm-legend">
@@ -1638,7 +1638,7 @@ function RatesMap() {
 
       <RatesDetail ab={sel} mode={mode} flCounties={flCounties} liveRate={liveRate} />
 
-      <div className="rm-foot">{mode === "base" ? <>Shaded by each state's <b>base</b> rate (state only). </> : <>Shaded by each state's <b>combined</b> average — state + population-weighted local (Tax Foundation 2025). </>}<b>Florida</b> is exact per county: 6% state + surtax (0–2%), on the first $5,000 of each item. Select a state and, with a key set ({live ? <b>live on</b> : <>off — set <code>VITE_TAX_API_KEY</code></>}), it upgrades to an exact local rate. Averages ~2025 — verify before relying. Not tax advice.</div>
+      <div className="rm-foot">{mode === "base" ? <>Shaded by each state's <b>base</b> rate (state only). </> : <>Shaded by each state's <b>combined</b> rate — the state rate plus its typical local add-on (Tax Foundation, ~2025). </>}<b>Florida</b> is exact per county: 6% state plus a 0–2% county surtax, charged on the first $5,000 of an item. Tap any state to see its county rates{live ? <>; the selected state shows a live, exact local rate</> : ""}. Rates outside Florida are averages — double-check before relying on them. Not tax advice.</div>
     </div>
   );
 }
