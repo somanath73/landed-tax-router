@@ -492,6 +492,7 @@ export default function Landed() {
   const [view, setView] = useState("map");
   const [mapFilter, setMapFilter] = useState("all"); // Locations filter: all | best | 50 | 100
   const [searched, setSearched] = useState(false);   // Home: false = Find form, true = Best Option result
+  const [compareOpen, setCompareOpen] = useState(false); // Compare-options overlay (reached from the result)
   const [tab, setTab] = useState("router"); // top-level tab: "router" | "map"
   const [screen, setScreen] = useState("home"); // bottom nav: home | locations | savings | profile
   const [option, setOption] = useState(null);   // chosen fulfillment: "store" | "deliver" | null (=use recommendation)
@@ -1196,6 +1197,19 @@ export default function Landed() {
         .rhero-big{font-family:'Archivo',sans-serif;font-size:42px;font-weight:800;letter-spacing:-.02em;line-height:1;margin-top:2px;}
         .rhero-sub{font-size:12px;opacity:.85;margin-top:6px;}
         .zip-loc{flex:none;border:none;background:transparent;font-size:16px;cursor:pointer;padding:0 2px;line-height:1;}
+        .cmp-item{display:flex;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 15px;}
+        .cmp-item-k{font-size:11.5px;color:var(--muted);}
+        .cmp-item-v{font-family:'Archivo',sans-serif;font-weight:800;font-size:15px;color:var(--ink);margin-top:2px;}
+        .cmp-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:15px;box-shadow:0 1px 2px rgba(16,34,26,.04),0 16px 30px -26px rgba(16,34,26,.5);}
+        .cmp-card[data-best=true]{border-color:var(--go);box-shadow:0 0 0 3px rgba(31,162,84,.1),0 14px 30px -22px rgba(31,162,84,.5);}
+        .cmp-card-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+        .cmp-card-t{font-family:'Archivo',sans-serif;font-weight:800;font-size:15px;color:var(--ink);}
+        .cmp-line{display:flex;justify-content:space-between;gap:10px;font-size:13px;color:var(--sub);padding:5px 0;}
+        .cmp-line span:last-child{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums;}
+        .cmp-line.total{border-top:1px solid var(--line);margin-top:6px;padding-top:10px;}
+        .cmp-line.total span,.cmp-line.total span:last-child{color:var(--ink);font-weight:800;font-size:15px;}
+        .cmp-save{margin-top:10px;background:var(--go-soft);color:var(--go-d);border-radius:10px;padding:8px 12px;font-weight:800;font-size:13px;text-align:center;}
+        .cmp-save.neg{background:var(--stay-soft);color:#9A4327;}
         .optgroup{display:flex;flex-direction:column;gap:10px;}
         .optcard{display:flex;align-items:center;gap:13px;width:100%;text-align:left;background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:14px;cursor:pointer;}
         .optcard[data-on=true]{border-color:var(--go);background:var(--go-soft);}
@@ -1349,8 +1363,8 @@ export default function Landed() {
 
       <div className="app">
         <header className="abar">
-          {detail ? (
-            <button type="button" className="abar-ic" aria-label="Back" onClick={() => setDetail(null)}>
+          {detail || compareOpen ? (
+            <button type="button" className="abar-ic" aria-label="Back" onClick={() => (detail ? setDetail(null) : setCompareOpen(false))}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
             </button>
           ) : (
@@ -1358,8 +1372,8 @@ export default function Landed() {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
             </button>
           )}
-          <div className="abar-title">{detail ? "Location" : screen === "home" ? <><span className="wm-a">Sales Tax</span> <span className="wm-b">Saver</span></> : screenTitle}</div>
-          {detail ? (
+          <div className="abar-title">{detail ? "Location" : compareOpen ? "Compare options" : screen === "home" ? <><span className="wm-a">Sales Tax</span> <span className="wm-b">Saver</span></> : screenTitle}</div>
+          {detail || compareOpen ? (
             <span className="abar-ic" aria-hidden="true" />
           ) : (
             <button type="button" className="abar-ic" aria-label="Settings" onClick={() => setScreen("profile")}>
@@ -1402,7 +1416,41 @@ export default function Landed() {
           );
         })()}
 
-        {!detail && screen === "home" && (searched ? (<>
+        {compareOpen && (() => {
+          const opts = [{ ...homeOpt, role: "Ship to home", isHome: true }];
+          if (bestAlt) opts.push({ ...bestAlt, role: "Pickup nearby" });
+          const lowTotal = Math.min(...opts.map((o) => o.landed));
+          return (
+            <>
+              <div className="cmp-item">
+                <div><div className="cmp-item-k">Your item</div><div className="cmp-item-v">{money(price)} · {category.l}</div></div>
+                <button type="button" className="link" onClick={() => setCompareOpen(false)}>Edit</button>
+              </div>
+              {opts.map((o, i) => {
+                const best = o.landed === lowTotal, save = homeOpt.landed - o.landed;
+                return (
+                  <div className="cmp-card" data-best={best} key={i}>
+                    <div className="cmp-card-h"><span className="cmp-card-t">{o.role}{!o.isHome && o.miles != null ? ` · ${o.miles} mi` : ""}</span>{best && <span className="cmp-best">Best</span>}</div>
+                    <div className="cmp-line"><span>Item price</span><span>{money(price)}</span></div>
+                    <div className="cmp-line"><span>Sales tax {o.taxable ? "(" + pct(o.combinedRate) + ")" : "(exempt)"}</span><span>{money(o.tax)}</span></div>
+                    {o.isHome ? (
+                      <div className="cmp-line"><span>Shipping</span><span>{money(o.shipping)}</span></div>
+                    ) : (<>
+                      {o.mileageCost > 0 && <div className="cmp-line"><span>Drive cost ({o.rtMiles} mi)</span><span>{money(o.mileageCost)}</span></div>}
+                      {o.timeCost > 0 && <div className="cmp-line"><span>Your time ({(o.rtMiles / AVG_SPEED).toFixed(1)} hrs)</span><span>{money(o.timeCost)}</span></div>}
+                      {o.pickup > 0 && <div className="cmp-line"><span>Pickup fee</span><span>{money(o.pickup)}</span></div>}
+                    </>)}
+                    <div className="cmp-line total"><span>Total cost</span><span>{money(o.landed)}</span></div>
+                    {save > 0 ? <div className="cmp-save">You save {money(save)} vs delivery</div> : (!o.isHome && save < 0 ? <div className="cmp-save neg">{money(-save)} more than delivery</div> : null)}
+                  </div>
+                );
+              })}
+              <div className="dt-note">Totals include sales tax, shipping, and (for pickups) gas + your time. Not tax advice.</div>
+            </>
+          );
+        })()}
+
+        {!detail && !compareOpen && screen === "home" && (searched ? (<>
           {reroute && bestAlt ? (
             <div className="rhero">
               <div className="rhero-badge"><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M5 4h14v2h2v2a4 4 0 0 1-4 4h-.4A5 5 0 0 1 13 14.9V17h3v2H8v-2h3v-2.1A5 5 0 0 1 7.4 12H7a4 4 0 0 1-4-4V6h2V4zm0 4v0a2 2 0 0 0 2 2V6H5v2zm14 0V6h-2v4a2 2 0 0 0 2-2z" /></svg> BEST DEAL</div>
@@ -1446,6 +1494,7 @@ export default function Landed() {
           </>) : (
             <a className="cta" href={shopURL} target="_blank" rel="noopener noreferrer">Shop online</a>
           )}
+          {bestAlt && <button type="button" className="cta sec" onClick={() => setCompareOpen(true)}>Compare all options</button>}
           <button type="button" className="link center" onClick={() => setSearched(false)}>‹ Try another search</button>
 
           <div className="sec-h">Nearby options</div>
@@ -1500,17 +1549,9 @@ export default function Landed() {
           </div>
           <button type="button" className="cta" onClick={() => { locate(zipInput); setSearched(true); }}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" style={{ marginRight: 8 }} aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.2-3.2" /></svg>Find Best Savings</button>
           <div className="dt-note">We factor in sales tax, drive cost, and your time to find real savings.</div>
-
-          <div className="hiw-h">How It Works</div>
-          <div className="hiw">
-            <div className="hiw-step"><span className="hiw-n">1</span><span className="hiw-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M12 21s6-5.7 6-10.5A6 6 0 0 0 6 10.5C6 15.3 12 21 12 21Z" /><circle cx="12" cy="10.3" r="2" /></svg></span><b>Enter your item</b><span>Price, category, and your ZIP.</span></div>
-            <div className="hiw-step"><span className="hiw-n">2</span><span className="hiw-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.2-3.2" /></svg></span><b>Find best savings</b><span>We compare delivery vs pickup.</span></div>
-            <div className="hiw-step"><span className="hiw-n">3</span><span className="hiw-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M8.5 12.5l2.5 2.5 4.5-5" /></svg></span><b>Keep more money</b><span>Net of gas + your time.</span></div>
-            <div className="hiw-step"><span className="hiw-n">4</span><span className="hiw-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M3 7h15a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" /><path d="M3 7l2-3h11l2 3" /><circle cx="16" cy="13" r="1.4" fill="currentColor" stroke="none" /></svg></span><b>Bigger = better</b><span>Pricier items save more.</span></div>
-          </div>
         </>))}
 
-        {!detail && screen === "locations" && (<>
+        {!detail && !compareOpen && screen === "locations" && (<>
           <div className="seg2">
             <button type="button" data-on={view !== "ledger"} onClick={() => setView("map")}>Map View</button>
             <button type="button" data-on={view === "ledger"} onClick={() => setView("ledger")}>List View</button>
@@ -1571,12 +1612,12 @@ export default function Landed() {
           {nearestFree && !homeFree && <div className="tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.2 1 2.5h6c0-1.3.3-1.8 1-2.5A6 6 0 0 0 12 3Z" /></svg><span>Nearest no-sales-tax state: <b>{nearestFree.name}</b>, about {Math.round(nearestFree.d)} mi away.</span></div>}
         </>)}
 
-        {!detail && screen === "map" && (<>
+        {!detail && !compareOpen && screen === "map" && (<>
           <p className="hint">US sales-tax rates by state — <b>tap any state</b> to drill into its real county rates.</p>
           <div className="uswrap"><RatesMap /></div>
         </>)}
 
-        {!detail && screen === "savings" && (<>
+        {!detail && !compareOpen && screen === "savings" && (<>
           {(() => {
             const ym = (t) => { const d = new Date(t); return d.getFullYear() + "-" + d.getMonth(); };
             const cur = ym(Date.now());
@@ -1697,7 +1738,7 @@ export default function Landed() {
           </details>
         </>)}
 
-        {!detail && screen === "profile" && (<>
+        {!detail && !compareOpen && screen === "profile" && (<>
           <div className="sec-h">Trip assumptions</div>
           <div className="card">
             <div className="hint">Used to judge whether driving to a pickup is worth it.</div>
