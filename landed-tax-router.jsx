@@ -828,7 +828,7 @@ export default function Landed() {
         .resolved{font-size:13px;color:var(--sub);margin-left:auto;text-align:right;line-height:1.4;}
         .resolved b{color:var(--ink);font-weight:700;}
         .badge{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:4px;margin-left:6px;}
-        .badge.ok,.badge.live,.badge.off{background:transparent;border:1px solid var(--line);color:var(--sub);}
+        .badge.ok,.badge.off{background:transparent;border:1px solid var(--line);color:var(--sub);}
         .badge.est{background:transparent;border:1px solid #E8B45A40;color:var(--gold);}
         .ld-grid{display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:start;}
         @media (max-width:760px){.ld-grid{grid-template-columns:1fr;}}
@@ -993,8 +993,6 @@ export default function Landed() {
         .rm-toggle{display:inline-flex;background:var(--sea);border:1px solid var(--line);border-radius:999px;padding:2px;}
         .rm-toggle button{font-family:'Archivo',sans-serif;font-weight:600;font-size:12.5px;padding:6px 13px;border:none;background:transparent;color:var(--sub);border-radius:999px;cursor:pointer;min-height:32px;}
         .rm-toggle button[data-on=true]{background:var(--card);color:var(--ink);box-shadow:0 1px 2px #00000059;}
-        .rm-livetag{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.02em;}
-        .rm-livetag.on{color:var(--go);}
         .rm-badge{font-family:'Archivo';font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--sub);background:var(--sea);border-radius:5px;padding:2px 6px;margin-left:8px;vertical-align:middle;}
         .rm-badge:not(.est){color:#FFFFFF;background:var(--go);}
         .rm-flwrap{margin-top:12px;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:8px;}
@@ -1226,7 +1224,6 @@ export default function Landed() {
         .tip svg{flex:none;width:22px;height:22px;color:var(--go);}
         .screen .empty{text-align:center;color:var(--muted);font-size:13px;padding:18px;background:var(--card);border:1px dashed var(--line);border-radius:14px;line-height:1.5;}
         .badge{font-size:9.5px;font-weight:800;border-radius:6px;padding:2px 6px;margin-left:6px;text-transform:uppercase;letter-spacing:.03em;}
-        .badge.live{background:var(--go-soft);color:var(--go-d);}
         .badge.est{background:#FBF1DF;color:var(--gold);}
         .cmp{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:15px;box-shadow:0 1px 2px rgba(16,34,26,.04),0 16px 30px -26px rgba(16,34,26,.5);}
         .cmp-head h4{margin:0;font-family:'Archivo',sans-serif;font-size:15px;font-weight:800;color:var(--ink);}
@@ -1362,8 +1359,7 @@ export default function Landed() {
           </div>
           <div className="locline">
             <span><b>{homeGeo.label}</b> · {homeFree ? "No sales tax" : "rate " + pct(homeRate.stateRate + homeRate.surtax)}
-              {!homeFree && homeRate.source === "api" && <span className="badge live">live</span>}
-              {!homeFree && homeRate.source !== "api" && !homeRate.precise && <span className="badge est">est</span>}</span>
+              {!homeFree && !homeRate.precise && <span className="badge est">est</span>}</span>
             <button type="button" className="link" disabled={resolving} onClick={() => locateMe(true)}>{resolving ? "Locating…" : "📍 My location"}</button>
           </div>
           {geoErr && <div className="errline">{geoErr}</div>}
@@ -1555,7 +1551,6 @@ export default function Landed() {
                 <div className="hs-row"><span>Travel avoided</span><b style={{ color: "var(--go)" }}>+{money(bestAlt.travel)}</b></div>
                 <div className="hs-net"><span>Net advantage</span><b style={{ color: "var(--go)" }}>+{money(headline)}</b></div>
               </>)}
-              <div className="hs-src">{homeRate.source === "api" ? "✓ Live rate · TaxJar" : "Estimated rate"}</div>
             </div>
           )}
 
@@ -1734,7 +1729,6 @@ function RatesMap() {
           <button type="button" role="tab" aria-selected={mode === "combined"} data-on={mode === "combined"} onClick={() => setMode("combined")}>Combined</button>
           <button type="button" role="tab" aria-selected={mode === "base"} data-on={mode === "base"} onClick={() => setMode("base")}>State base</button>
         </div>
-        {live && <span className="rm-livetag on">● live rates</span>}
       </div>
 
       <div className="rm-legend">
@@ -1773,7 +1767,7 @@ function RatesMap() {
 
       <RatesDetail ab={sel} mode={mode} flCounties={flCounties} liveRate={liveRate} />
 
-      <div className="rm-foot">{mode === "base" ? <>Shaded by each state's <b>base</b> rate (state only). </> : <>Shaded by each state's <b>combined</b> rate — the state rate plus its typical local add-on (Tax Foundation, ~2025). </>}<b>Florida</b> is exact per county: 6% state plus a 0–2% county surtax, charged on the first $5,000 of an item. Tap any state to see its county rates{live ? <>; the selected state shows a live, exact local rate</> : ""}. Rates outside Florida are averages — double-check before relying on them. Not tax advice.</div>
+      <div className="rm-foot">{mode === "base" ? <>Shaded by each state's <b>base</b> rate (state only). </> : <>Shaded by each state's <b>combined</b> rate — the state rate plus its typical local add-on (Tax Foundation, ~2025). </>}<b>Florida</b> is exact per county: 6% state plus a 0–2% county surtax, charged on the first $5,000 of an item. Tap any state to see its county rates. Rates outside Florida are averages — double-check before relying on them. Not tax advice.</div>
     </div>
   );
 }
@@ -1865,7 +1859,7 @@ function RatesDetail({ ab, mode, flCounties, liveRate }) {
     );
   }
   const est = mapRate(ab, mode);
-  const showLive = liveRate && liveRate.ab === ab;
+  const showLive = false; // live-rate display removed
   const rate = showLive ? liveRate.rate : est;
   const note = showLive ? `Live exact rate near ${liveRate.note || name}.`
     : ab === "AK" ? (mode === "base" ? "No state sales tax, but most boroughs and cities add local tax." : "No state tax — this is the average local rate, which varies widely by borough.")
