@@ -429,6 +429,7 @@ export default function Landed() {
   const [tab, setTab] = useState("router"); // top-level tab: "router" | "map"
   const [screen, setScreen] = useState("home"); // bottom nav: home | locations | savings | profile
   const [option, setOption] = useState(null);   // chosen fulfillment: "store" | "deliver" | null (=use recommendation)
+  const [detail, setDetail] = useState(null);    // a tapped nearby location → full-screen detail view, or null
   const [sug, setSug] = useState([]); const [showSug, setShowSug] = useState(false); const [sugIdx, setSugIdx] = useState(-1);
   const placesRef = useRef(null);
   const [advOpen, setAdvOpen] = useState(() => { try { return localStorage.getItem("ld:adv") === "1"; } catch { return false; } });
@@ -1192,22 +1193,90 @@ export default function Landed() {
         .screen .foot summary{font-size:12px;color:var(--muted);cursor:pointer;padding:6px 0;list-style:none;}
         .screen .foot summary::-webkit-details-marker{display:none;}
         .screen .foot p{font-size:11.5px;color:var(--sub);line-height:1.55;margin:6px 0 0;}
+        .wm-a{color:var(--go);} .wm-b{color:var(--ink);}
+        .optgo{flex:none;width:28px;height:28px;border-radius:50%;border:1.5px solid var(--line);display:grid;place-items:center;color:var(--muted);}
+        .optgo svg{width:15px;height:15px;}
+        .optcard[data-on=true] .optgo{background:var(--go);border-color:var(--go);color:#fff;}
+        .hiw-h{font-family:'Archivo',sans-serif;font-size:15px;font-weight:800;color:var(--ink);text-align:center;margin:10px 0 0;}
+        .hiw{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+        .hiw-step{position:relative;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 12px 12px;display:flex;flex-direction:column;gap:2px;}
+        .hiw-n{position:absolute;top:10px;right:10px;width:18px;height:18px;border-radius:50%;background:var(--go);color:#fff;font-size:10px;font-weight:800;display:grid;place-items:center;}
+        .hiw-ic{width:34px;height:34px;border-radius:10px;background:var(--go-soft);color:var(--go);display:grid;place-items:center;margin-bottom:5px;}
+        .hiw-ic svg{width:19px;height:19px;}
+        .hiw-step b{font-family:'Archivo',sans-serif;font-size:13px;font-weight:800;color:var(--ink);}
+        .hiw-step span:last-child{font-size:11.5px;color:var(--sub);line-height:1.35;}
+        .dt-hero{position:relative;height:150px;border-radius:18px;display:grid;place-items:center;background:linear-gradient(135deg,#1FA254,#0B7F88);color:rgba(255,255,255,.92);overflow:hidden;}
+        .dt-hero[data-free=false]{background:linear-gradient(135deg,#3F7CC4,#5B5FD0);}
+        .dt-hero::after{content:"";position:absolute;inset:0;background:radial-gradient(120% 80% at 50% -10%,rgba(255,255,255,.18),transparent 60%);}
+        .dt-pin{width:54px;height:54px;position:relative;z-index:1;filter:drop-shadow(0 6px 12px rgba(0,0,0,.25));}
+        .dt-hbadge{position:absolute;top:12px;left:12px;z-index:1;background:#fff;color:var(--go-d);font-family:'Archivo',sans-serif;font-size:10.5px;font-weight:800;letter-spacing:.04em;border-radius:7px;padding:4px 9px;}
+        .dt-head h2{margin:0;font-family:'Archivo',sans-serif;font-size:20px;font-weight:800;color:var(--ink);letter-spacing:-.01em;}
+        .dt-meta{font-size:12.5px;color:var(--sub);margin-top:4px;}
+        .dt-why{display:flex;gap:12px;align-items:flex-start;background:var(--go-soft);border:1px solid #CBE7D5;border-radius:14px;padding:13px;}
+        .dt-why-ic{flex:none;width:38px;height:38px;border-radius:11px;background:#fff;color:var(--go);display:grid;place-items:center;}
+        .dt-why-ic svg{width:20px;height:20px;}
+        .dt-why-t{font-family:'Archivo',sans-serif;font-weight:800;font-size:13.5px;color:var(--go-d);}
+        .dt-why-d{font-size:12.5px;color:var(--sub);line-height:1.4;margin-top:2px;}
+        .dt-note{font-size:11.5px;color:var(--muted);line-height:1.45;text-align:center;padding:2px 6px;}
+        .dt-note b{color:var(--sub);}
       `}</style>
 
       <div className="app">
         <header className="abar">
-          <button type="button" className="abar-ic" aria-label="Settings" onClick={() => setScreen("profile")}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
-          </button>
-          <div className="abar-title">{screenTitle}</div>
-          <span className="abar-ic" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0" /></svg>
-          </span>
+          {detail ? (
+            <button type="button" className="abar-ic" aria-label="Back" onClick={() => setDetail(null)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
+            </button>
+          ) : (
+            <button type="button" className="abar-ic" aria-label="Menu" onClick={() => setScreen("profile")}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
+            </button>
+          )}
+          <div className="abar-title">{detail ? "Location" : screen === "home" ? <><span className="wm-a">Sales Tax</span> <span className="wm-b">Saver</span></> : screenTitle}</div>
+          {detail ? (
+            <span className="abar-ic" aria-hidden="true" />
+          ) : (
+            <button type="button" className="abar-ic" aria-label="Settings" onClick={() => setScreen("profile")}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
+            </button>
+          )}
         </header>
 
         <main className="screen">
 
-        {screen === "home" && (<>
+        {detail && (() => {
+          const d = detail, free = d.taxFree || d.combinedRate === 0;
+          const cityName = d.name.split(/[,·]/)[0].trim();
+          const stFull = STATE_NAMES[d.state] || d.state;
+          const taxSaved = Math.max(0, homeOpt.tax - (d.tax || 0));
+          const dir = d.lat != null ? `https://www.google.com/maps/dir/?api=1&origin=${enc(homeGeo.zip || homeGeo.label || "")}&destination=${d.lat},${d.lng}` : null;
+          const stores = d.lat != null ? `https://www.google.com/maps/search/${enc(SHOP_Q[categoryId] || "stores")}/@${d.lat},${d.lng},13z` : null;
+          return (
+            <>
+              <div className="dt-hero" data-free={free}>
+                <svg className="dt-pin" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z" /></svg>
+                <span className="dt-hbadge">{free ? "TAX FREE" : pct(d.combinedRate)}</span>
+              </div>
+              <div className="dt-head">
+                <h2>{cityName}, {stFull}</h2>
+                <div className="dt-meta">{d.miles} mi away · {free ? "No sales tax" : "Combined " + pct(d.combinedRate)}</div>
+              </div>
+              <div className="dt-why">
+                <span className="dt-why-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M12 3l7 3v6c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6l7-3z" /><path d="M9 12l2 2 4-4" /></svg></span>
+                <div><div className="dt-why-t">{free ? "Why it's tax-free" : "Why it's cheaper"}</div><div className="dt-why-d">{free ? `${stFull} has no state sales tax.` : `The combined rate here is ${pct(d.combinedRate)} — lower than your area's ${pct(homeRate.stateRate + homeRate.surtax)}.`}</div></div>
+              </div>
+              <div className="sec-h">Estimated Savings</div>
+              <div className="savecard">
+                <div><div className="save-k">Sales tax you'd avoid</div><div className="save-v">{money(taxSaved)}</div><div className="save-sub">On your {money(price)} item{taxSaved > 0 ? `, vs ${money(homeOpt.tax)} tax at home` : ""}</div></div>
+              </div>
+              {stores && <a className="cta sec" href={stores} target="_blank" rel="noopener noreferrer">Browse stores here on Maps ↗</a>}
+              {dir && <a className="cta" href={dir} target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style={{ marginRight: 8 }} aria-hidden="true"><path d="M21.4 11.3 3.6 3.4c-.7-.3-1.4.4-1.1 1.1l2.9 6.6c.1.3.1.5 0 .8l-2.9 6.6c-.3.7.4 1.4 1.1 1.1l17.8-7.9c.7-.3.7-1.2 0-1.4z" /></svg>Get Directions</a>}
+              <div className="dt-note">Driving here? Check the gas + time on the <b>Savings</b> tab — a trip only wins if the tax saved covers it.</div>
+            </>
+          );
+        })()}
+
+        {!detail && screen === "home" && (<>
           <section className="banner">
             <span className="banner-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0l-7-7V4h9.6l7.4 7.4a2 2 0 0 1 0 2.8Z" /><circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none" /></svg></span>
             <div><h2>Save on Sales Tax</h2><p>Shop in tax-free locations or get it delivered to save.</p></div>
@@ -1240,7 +1309,7 @@ export default function Landed() {
           </div>
           {geoErr && <div className="errline">{geoErr}</div>}
 
-          <div className="sec-h">Choose Your Option</div>
+          <div className="sec-h">Choose an Option</div>
           <div className="optgroup">
             <button type="button" className="optcard" data-on={chosen === "store"} aria-pressed={chosen === "store"} onClick={() => setOption("store")}>
               <span className="optcard-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round"><path d="M4.5 9.5 5.7 4.5h12.6l1.2 5M4.5 9.5h15M5 9.5v9.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5M4.5 9.5a2.4 2.4 0 0 0 4.9 0 2.4 2.4 0 0 0 4.9 0 2.4 2.4 0 0 0 4.7 0" /></svg></span>
@@ -1249,7 +1318,7 @@ export default function Landed() {
                 <span className="optcard-d">Pick up in a tax-free or lower-tax location to save on sales tax.</span>
                 {recommended === "store" && <span className="optcard-badge">SAVE TAX</span>}
               </span>
-              <span className="radio" aria-hidden="true"><i /></span>
+              <span className="optgo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg></span>
             </button>
             <button type="button" className="optcard" data-on={chosen === "deliver"} aria-pressed={chosen === "deliver"} onClick={() => setOption("deliver")}>
               <span className="optcard-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round"><path d="M3.5 11 12 4l8.5 7M5.5 9.6V20h13V9.6M9.7 20v-5.4h4.6V20" /></svg></span>
@@ -1258,7 +1327,7 @@ export default function Landed() {
                 <span className="optcard-d">Sales tax will apply based on your delivery address.</span>
                 {recommended === "deliver" && <span className="optcard-badge">BEST</span>}
               </span>
-              <span className="radio" aria-hidden="true"><i /></span>
+              <span className="optgo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg></span>
             </button>
           </div>
 
@@ -1282,6 +1351,7 @@ export default function Landed() {
             <span className="mapprev-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M12 21s6-5.7 6-10.5A6 6 0 0 0 6 10.5C6 15.3 12 21 12 21Z" /><circle cx="12" cy="10.3" r="2" /></svg>View on Map →</span>
           </button>
 
+          <div className="sec-h">Potential Savings</div>
           <div className="savecard">
             <div><div className="save-k">You could save</div><div className="save-v">{money(youCouldSave)}</div><div className="save-sub">Estimated tax savings</div></div>
             <div><div className="save-k">Estimated tax</div><div className="save-v alt">{money(chosenTax)}</div><div className="save-sub">{chosen === "store" && chosenTax < homeTax ? "Instead of " + money(homeTax) : "On a " + money(price) + " item"}</div></div>
@@ -1296,9 +1366,17 @@ export default function Landed() {
           </>) : (
             <a className="cta" href={shopURL} target="_blank" rel="noopener noreferrer">{"Start Shopping & Save"}</a>
           )}
+
+          <div className="hiw-h">How It Works</div>
+          <div className="hiw">
+            <div className="hiw-step"><span className="hiw-n">1</span><span className="hiw-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M12 21s6-5.7 6-10.5A6 6 0 0 0 6 10.5C6 15.3 12 21 12 21Z" /><circle cx="12" cy="10.3" r="2" /></svg></span><b>Find tax-free spots</b><span>States &amp; towns with no sales tax.</span></div>
+            <div className="hiw-step"><span className="hiw-n">2</span><span className="hiw-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M6 8h12l-1 12H7L6 8z" /><path d="M9 8a3 3 0 0 1 6 0" /></svg></span><b>Shop &amp; save</b><span>Pick up in store, skip the tax.</span></div>
+            <div className="hiw-step"><span className="hiw-n">3</span><span className="hiw-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M8.5 12.5l2.5 2.5 4.5-5" /></svg></span><b>Keep more money</b><span>Save instantly on every buy.</span></div>
+            <div className="hiw-step"><span className="hiw-n">4</span><span className="hiw-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M3 7h15a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" /><path d="M3 7l2-3h11l2 3" /><circle cx="16" cy="13" r="1.4" fill="currentColor" stroke="none" /></svg></span><b>Bigger = better</b><span>Pricier items save more.</span></div>
+          </div>
         </>)}
 
-        {screen === "locations" && (<>
+        {!detail && screen === "locations" && (<>
           <div className="seg2">
             <button type="button" data-on={view !== "ledger"} onClick={() => setView("map")}>Map View</button>
             <button type="button" data-on={view === "ledger"} onClick={() => setView("ledger")}>List View</button>
@@ -1333,9 +1411,8 @@ export default function Landed() {
               <div className="empty">No lower-tax pickups within {radius} mi. Widen the search radius in Profile, or add a pickup there.</div>
             ) : cands.map((c) => {
               const free = c.taxFree || c.combinedRate === 0;
-              const url = c.lat != null ? `https://www.google.com/maps/dir/?api=1&origin=${enc(homeGeo.zip || homeGeo.label || "")}&destination=${c.lat},${c.lng}` : null;
               return (
-                <a key={c.name + (c.zip || "")} className="locrow" href={url || undefined} target={url ? "_blank" : undefined} rel="noopener noreferrer" aria-label={url ? `${c.name} — ${free ? "no sales tax" : pct(c.combinedRate)}, ${c.miles} mi away. Open driving directions in Google Maps.` : c.name}>
+                <button key={c.name + (c.zip || "")} type="button" className="locrow" onClick={() => setDetail(c)} aria-label={`${c.name} — ${free ? "no sales tax" : pct(c.combinedRate)}, ${c.miles} mi away. View details.`}>
                   <span className="locrow-ic" data-free={free} aria-hidden="true">%</span>
                   <span className="locrow-b">
                     <span className="locrow-t">{c.name}</span>
@@ -1343,19 +1420,19 @@ export default function Landed() {
                   </span>
                   {free ? <span className="tag-free">TAX FREE</span> : <span className="tag-low">−{money0(Math.max(0, homeOpt.tax - c.tax))} tax</span>}
                   <span className="locrow-arrow">›</span>
-                </a>
+                </button>
               );
             })}
           </div>
           {nearestFree && !homeFree && <div className="tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.2 1 2.5h6c0-1.3.3-1.8 1-2.5A6 6 0 0 0 12 3Z" /></svg><span>Nearest no-sales-tax state: <b>{nearestFree.name}</b>, about {Math.round(nearestFree.d)} mi away.</span></div>}
         </>)}
 
-        {screen === "map" && (<>
+        {!detail && screen === "map" && (<>
           <p className="hint">US sales-tax rates by state — <b>tap any state</b> to drill into its real county rates.</p>
           <div className="uswrap"><RatesMap /></div>
         </>)}
 
-        {screen === "savings" && (<>
+        {!detail && screen === "savings" && (<>
           <section className="banner">
             <span className="banner-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 3v18M16 6.5C16 4.9 14.2 4 12 4S8 5 8 6.8 9.8 9.5 12 9.5s4 1 4 2.8-1.8 2.7-4 2.7-4-.9-4-2.5" /></svg></span>
             <div><h2>{money(youCouldSave)} {reroute ? "to be saved" : "best move"}</h2><p>{reroute ? "Picking up beats shipping after gas + time." : noAlt ? "No pickups within range — shipping home wins." : "Shipping home is your best move right now."}</p></div>
@@ -1435,7 +1512,7 @@ export default function Landed() {
           </details>
         </>)}
 
-        {screen === "profile" && (<>
+        {!detail && screen === "profile" && (<>
           <div className="sec-h">Trip assumptions</div>
           <div className="card">
             <div className="hint">Used to judge whether driving to a pickup is worth it.</div>
@@ -1878,6 +1955,15 @@ function MapView({ home, all, radiusMi, reroute, recoKey, interactive = false })
           <g onClick={(e) => { e.stopPropagation(); zoomBy(-1); }} style={{ cursor: "pointer" }}>
             <rect x={W - 46} y="50" width="34" height="34" rx="9" fill="#FFFFFF" opacity="0.96" stroke="#D8E0DA" />
             <line x1={W - 37} y1="67" x2={W - 21} y2="67" stroke="#10221A" strokeWidth="2.6" strokeLinecap="round" />
+          </g>
+          <g onClick={(e) => { e.stopPropagation(); setCam(null); }} style={{ cursor: "pointer" }}>
+            <rect x={W - 46} y={H - 46} width="34" height="34" rx="9" fill="#FFFFFF" opacity="0.96" stroke="#D8E0DA" />
+            <circle cx={W - 29} cy={H - 29} r="6" fill="none" stroke="#10221A" strokeWidth="2" />
+            <circle cx={W - 29} cy={H - 29} r="1.6" fill="#10221A" />
+            <line x1={W - 29} y1={H - 42} x2={W - 29} y2={H - 39} stroke="#10221A" strokeWidth="2" strokeLinecap="round" />
+            <line x1={W - 29} y1={H - 19} x2={W - 29} y2={H - 16} stroke="#10221A" strokeWidth="2" strokeLinecap="round" />
+            <line x1={W - 42} y1={H - 29} x2={W - 39} y2={H - 29} stroke="#10221A" strokeWidth="2" strokeLinecap="round" />
+            <line x1={W - 19} y1={H - 29} x2={W - 16} y2={H - 29} stroke="#10221A" strokeWidth="2" strokeLinecap="round" />
           </g>
         </g>
       )}
