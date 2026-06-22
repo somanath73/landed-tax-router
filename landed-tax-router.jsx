@@ -385,6 +385,14 @@ const SHOP_ONLINE = { general: "", clothing: "clothing", groceries: "groceries",
 // Voluntary "buy me a coffee" tip link (set to your own handle/URL).
 const DONATE_URL = "https://www.buymeacoffee.com/somanath73";
 
+// State that persists to localStorage, so user settings stick until they change them again.
+const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } };
+function usePersistentState(key, initial) {
+  const [v, setV] = useState(() => lsGet(key, initial));
+  useEffect(() => { try { localStorage.setItem(key, JSON.stringify(v)); } catch {} }, [key, v]);
+  return [v, setV];
+}
+
 const SCENARIOS = [
   { id: "laptop", e: "💻", l: "$1,800 laptop in Boston", sub: "Tax-free NH is a short drive", price: 1800, cat: "general", zip: "02108" },
   { id: "sneakers", e: "👟", l: "$140 sneakers in Philly", sub: "Clothing is tax-exempt in PA", price: 140, cat: "clothing", zip: "19103" },
@@ -415,15 +423,15 @@ export default function Landed() {
   const [geoErr, setGeoErr] = useState("");
   const [pickInput, setPickInput] = useState("");
   const [pickErr, setPickErr] = useState("");
-  const [userPoints, setUserPoints] = useState([]);
+  const [userPoints, setUserPoints] = usePersistentState("sts:pickups", []);
   const [price, setPrice] = useState(1500);
   const [categoryId, setCategoryId] = useState("general");
   const [freeShip, setFreeShip] = useState(true);
-  const [costPerMile, setCostPerMile] = useState(0.4);
-  const [timeValue, setTimeValue] = useState(20);
-  const [minSavings, setMinSavings] = useState(20);
-  const [pickupFee, setPickupFee] = useState(0);
-  const [radius, setRadius] = useState(100);
+  const [costPerMile, setCostPerMile] = usePersistentState("sts:costPerMile", 0.4);
+  const [timeValue, setTimeValue] = usePersistentState("sts:timeValue", 20);
+  const [minSavings, setMinSavings] = usePersistentState("sts:minSavings", 20);
+  const [pickupFee, setPickupFee] = usePersistentState("sts:pickupFee", 0);
+  const [radius, setRadius] = usePersistentState("sts:radius", 100);
   const [calcAmt, setCalcAmt] = useState(1000);
   const [view, setView] = useState("map");
   const [tab, setTab] = useState("router"); // top-level tab: "router" | "map"
