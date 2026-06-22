@@ -469,6 +469,7 @@ export default function Landed() {
   const [screen, setScreen] = useState("home"); // bottom nav: home | locations | savings | profile
   const [option, setOption] = useState(null);   // chosen fulfillment: "store" | "deliver" | null (=use recommendation)
   const [detail, setDetail] = useState(null);    // a tapped nearby location → full-screen detail view, or null
+  const [history, setHistory] = usePersistentState("sts:history", []); // logged comparisons you acted on (for My Savings)
   const [sug, setSug] = useState([]); const [showSug, setShowSug] = useState(false); const [sugIdx, setSugIdx] = useState(-1);
   const placesRef = useRef(null);
   const [advOpen, setAdvOpen] = useState(() => { try { return localStorage.getItem("ld:adv") === "1"; } catch { return false; } });
@@ -782,7 +783,14 @@ export default function Landed() {
     : belowBar
     ? `A pickup saves only ${money(savings)} — under your $${minSavings} bar once gas + time are counted.`
     : `No nearby pickup beats shipping once gas + time are counted.`;
-  const screenTitle = screen === "home" ? "Sales Tax Saver" : screen === "locations" ? "Tax-Free Locations" : screen === "map" ? "US Tax Map" : screen === "savings" ? "Your Savings" : "Profile";
+  const screenTitle = screen === "home" ? "Sales Tax Saver" : screen === "locations" ? "Tax-Free Locations" : screen === "map" ? "US Tax Map" : screen === "savings" ? "My Savings" : "Settings";
+  // Record a comparison the user actually acted on (tapped Get Directions on a saving) → powers the My Savings dashboard.
+  const logSaving = (place, amt) => {
+    if (!(amt > 0)) return;
+    setHistory((h) => (h[0] && h[0].place === place && Math.abs((h[0].amt || 0) - amt) < 0.01 && Date.now() - h[0].ts < 120000)
+      ? h
+      : [{ ts: Date.now(), place, amt, price }, ...h].slice(0, 60));
+  };
 
   return (
     <div className="ld-root" data-boot={boot}>
@@ -1134,6 +1142,18 @@ export default function Landed() {
         .donate-t{font-family:'Archivo',sans-serif;font-weight:800;font-size:14.5px;color:#7A5A12;}
         .donate-d{font-size:12px;color:#9A7A2E;margin-top:2px;line-height:1.35;}
         .donate-arrow{flex:none;color:#B9831C;font-weight:800;font-size:15px;}
+        .dash{background:linear-gradient(135deg,#1FA254,#0B7F88);color:#fff;border-radius:18px;padding:18px;box-shadow:0 14px 30px -18px rgba(11,127,136,.6);}
+        .dash-k{font-size:12px;opacity:.85;}
+        .dash-big{font-family:'Archivo',sans-serif;font-size:36px;font-weight:800;letter-spacing:-.02em;margin-top:2px;line-height:1;}
+        .dash-spark{display:block;width:100%;height:46px;margin:12px 0 4px;overflow:visible;}
+        .dash-stats{display:flex;gap:8px;margin-top:14px;}
+        .dash-stats>div{flex:1;background:rgba(255,255,255,.15);border-radius:12px;padding:10px 8px;text-align:center;}
+        .dash-n{font-family:'Archivo',sans-serif;font-weight:800;font-size:17px;}
+        .dash-l{font-size:10.5px;opacity:.85;margin-top:2px;}
+        .cmprow{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:13px;padding:12px 14px;}
+        .cmprow b{font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;color:var(--ink);}
+        .cmprow span{display:block;font-size:11.5px;color:var(--muted);margin-top:2px;}
+        .cmprow-amt{flex:none;font-weight:800;color:var(--go-d);font-size:13.5px;white-space:nowrap;}
         .optgroup{display:flex;flex-direction:column;gap:10px;}
         .optcard{display:flex;align-items:center;gap:13px;width:100%;text-align:left;background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:14px;cursor:pointer;}
         .optcard[data-on=true]{border-color:var(--go);background:var(--go-soft);}
@@ -1330,7 +1350,7 @@ export default function Landed() {
                 <div><div className="save-k">Sales tax you'd avoid</div><div className="save-v">{money(taxSaved)}</div><div className="save-sub">On your {money(price)} item{taxSaved > 0 ? `, vs ${money(homeOpt.tax)} tax at home` : ""}</div></div>
               </div>
               {stores && <a className="cta sec" href={stores} target="_blank" rel="noopener noreferrer">Browse stores here on Maps ↗</a>}
-              {dir && <a className="cta" href={dir} target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style={{ marginRight: 8 }} aria-hidden="true"><path d="M21.4 11.3 3.6 3.4c-.7-.3-1.4.4-1.1 1.1l2.9 6.6c.1.3.1.5 0 .8l-2.9 6.6c-.3.7.4 1.4 1.1 1.1l17.8-7.9c.7-.3.7-1.2 0-1.4z" /></svg>Get Directions</a>}
+              {dir && <a className="cta" href={dir} target="_blank" rel="noopener noreferrer" onClick={() => logSaving(cityName, taxSaved)}><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style={{ marginRight: 8 }} aria-hidden="true"><path d="M21.4 11.3 3.6 3.4c-.7-.3-1.4.4-1.1 1.1l2.9 6.6c.1.3.1.5 0 .8l-2.9 6.6c-.3.7.4 1.4 1.1 1.1l17.8-7.9c.7-.3.7-1.2 0-1.4z" /></svg>Get Directions</a>}
               <div className="dt-note">Driving here? Check the gas + time on the <b>Savings</b> tab — a trip only wins if the tax saved covers it.</div>
             </>
           );
@@ -1411,7 +1431,7 @@ export default function Landed() {
           </div>
 
           {chosen === "store" && storeWorthIt ? (<>
-            <a className="cta" href={dirURL} target="_blank" rel="noopener noreferrer" aria-label="Start shopping — open driving directions to the pickup in Google Maps">{"Start Shopping & Save"}</a>
+            <a className="cta" href={dirURL} target="_blank" rel="noopener noreferrer" aria-label="Start shopping — open driving directions to the pickup in Google Maps" onClick={() => logSaving(bestAlt.name.split(/[,·]/)[0].trim(), youCouldSave)}>{"Start Shopping & Save"}</a>
             <a className="cta sec" href={findStoresURL} target="_blank" rel="noopener noreferrer">Find stores near the pickup</a>
           </>) : chosen === "store" ? (<>
             <div className="notice">{storeNudge}</div>
@@ -1492,10 +1512,52 @@ export default function Landed() {
         </>)}
 
         {!detail && screen === "savings" && (<>
-          <section className="banner">
-            <span className="banner-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 3v18M16 6.5C16 4.9 14.2 4 12 4S8 5 8 6.8 9.8 9.5 12 9.5s4 1 4 2.8-1.8 2.7-4 2.7-4-.9-4-2.5" /></svg></span>
-            <div><h2>{money(youCouldSave)} {reroute ? "to be saved" : "best move"}</h2><p>{reroute ? "Picking up beats shipping after gas + time." : noAlt ? "No pickups within range — shipping home wins." : "Shipping home is your best move right now."}</p></div>
-          </section>
+          {(() => {
+            const ym = (t) => { const d = new Date(t); return d.getFullYear() + "-" + d.getMonth(); };
+            const cur = ym(Date.now());
+            const month = history.filter((e) => ym(e.ts) === cur);
+            const total = month.reduce((s, e) => s + e.amt, 0);
+            const best = month.reduce((m, e) => Math.max(m, e.amt), 0);
+            const avg = month.length ? total / month.length : 0;
+            const pts = month.slice().reverse().map((e) => e.amt);
+            let spark = null;
+            if (pts.length >= 2) {
+              const mx = Math.max(...pts), mn = Math.min(...pts), W = 280, H = 46;
+              const px = (i) => ((i / (pts.length - 1)) * W).toFixed(1);
+              const py = (v) => (mx === mn ? H / 2 : H - ((v - mn) / (mx - mn)) * H).toFixed(1);
+              const d = pts.map((v, i) => (i ? "L" : "M") + px(i) + " " + py(v)).join(" ");
+              spark = <svg className="dash-spark" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true"><path d={d} fill="none" stroke="rgba(255,255,255,.9)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+            }
+            return (
+              <div className="dash">
+                <div className="dash-k">This month · potential savings found</div>
+                <div className="dash-big">{money(total)}</div>
+                {spark}
+                <div className="dash-stats">
+                  <div><div className="dash-n">{month.length}</div><div className="dash-l">Compared</div></div>
+                  <div><div className="dash-n">{money0(best)}</div><div className="dash-l">Best save</div></div>
+                  <div><div className="dash-n">{money0(avg)}</div><div className="dash-l">Avg save</div></div>
+                </div>
+              </div>
+            );
+          })()}
+
+          <div className="sec-h" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span>Recent comparisons</span>
+            {history.length > 0 && <button type="button" className="link" style={{ fontSize: 11.5 }} onClick={() => setHistory([])}>Clear</button>}
+          </div>
+          {history.length === 0 ? (
+            <div className="empty">No comparisons logged yet. When a pickup saves you money, tap <b>Get Directions</b> on it and it'll show up here.</div>
+          ) : (
+            <div className="loclist">
+              {history.slice(0, 6).map((e, i) => (
+                <div className="cmprow" key={e.ts + "-" + i}>
+                  <div><b>{e.place}</b><span>{new Date(e.ts).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · Pickup vs delivery</span></div>
+                  <div className="cmprow-amt">You saved {money(e.amt)}</div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {(homeOpt.taxable || (bestAlt && bestAlt.taxable)) && (() => {
             const city = (o) => o.name.split(/[,·]/)[0].trim();
@@ -1617,7 +1679,7 @@ export default function Landed() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 3v18M16 6.5C16 4.9 14.2 4 12 4S8 5 8 6.8 9.8 9.5 12 9.5s4 1 4 2.8-1.8 2.7-4 2.7-4-.9-4-2.5" /></svg><span>Savings</span>
           </button>
           <button type="button" data-on={screen === "profile"} aria-current={screen === "profile"} onClick={() => setScreen("profile")}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="3.4" /><path d="M5 20c0-3.3 3.1-5.6 7-5.6s7 2.3 7 5.6" /></svg><span>Profile</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg><span>Settings</span>
           </button>
         </nav>
       </div>
