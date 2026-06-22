@@ -1197,11 +1197,15 @@ export default function Landed() {
         .uswrap{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:10px;}
         .uswrap svg{max-width:100%;height:auto;}
         .savecard{display:flex;background:var(--go-soft);border:1px solid #CBE7D5;border-radius:16px;overflow:hidden;}
+        .savecard[data-save=true]{border-color:var(--go);box-shadow:0 0 0 3px rgba(31,162,84,.12),0 14px 30px -22px rgba(31,162,84,.5);}
         .savecard>div{flex:1;padding:14px 16px;}
+        .savecard>div:first-child{flex:1.25;}
         .savecard>div+div{border-left:1px solid #CBE7D5;}
         .save-k{font-size:11.5px;font-weight:600;color:var(--sub);}
         .save-v{font-family:'Archivo',sans-serif;font-size:25px;font-weight:800;color:var(--go-d);margin-top:3px;letter-spacing:-.02em;}
-        .save-v.alt{color:var(--ink);}
+        .save-v.big{font-size:34px;line-height:1.05;}
+        .savecard[data-save=true] .save-v.big{color:var(--go);}
+        .save-v.alt{color:var(--ink);font-size:22px;}
         .save-sub{font-size:11px;color:var(--muted);margin-top:3px;}
         .cta{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:var(--go);color:#fff;border:none;border-radius:14px;padding:16px;font-family:'Archivo',sans-serif;font-size:16px;font-weight:800;letter-spacing:.01em;cursor:pointer;text-decoration:none;box-shadow:0 10px 22px -10px rgba(31,162,84,.7);}
         .cta:active{transform:translateY(1px);}
@@ -1400,15 +1404,9 @@ export default function Landed() {
             <button type="button" className="tog" role="switch" aria-checked={freeShip} aria-label="Free shipping" onClick={() => setFreeShip((v) => !v)}><span>Free shipping</span><span className="switch" data-on={freeShip}><i /></span></button>
           </div>
 
-          <div className="sec-h">Find Tax-Free Locations</div>
-          <button type="button" className="mapprev" onClick={() => setScreen("locations")} aria-label="View locations on map">
-            <span className="mapprev-map"><MapView home={homeOpt} all={all} radiusMi={radius} reroute={reroute} recoKey={reroute && bestAlt ? bestAlt.name + (bestAlt.zip || "") : ""} /></span>
-            <span className="mapprev-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M12 21s6-5.7 6-10.5A6 6 0 0 0 6 10.5C6 15.3 12 21 12 21Z" /><circle cx="12" cy="10.3" r="2" /></svg>View on Map →</span>
-          </button>
-
           <div className="sec-h">Potential Savings</div>
-          <div className="savecard">
-            <div><div className="save-k">You could save</div><div className="save-v">{money(youCouldSave)}</div><div className="save-sub">Estimated tax savings</div></div>
+          <div className="savecard" data-save={youCouldSave > 0}>
+            <div><div className="save-k">You could save</div><div className="save-v big" style={{ color: youCouldSave > 0 ? undefined : "var(--muted)" }}>{money(youCouldSave)}</div><div className="save-sub">Estimated tax savings</div></div>
             <div><div className="save-k">Estimated tax</div><div className="save-v alt">{money(chosenTax)}</div><div className="save-sub">{chosen === "store" && chosenTax < homeTax ? "Instead of " + money(homeTax) : "On a " + money(price) + " item"}</div></div>
           </div>
 
@@ -1421,6 +1419,12 @@ export default function Landed() {
           </>) : (
             <a className="cta" href={shopURL} target="_blank" rel="noopener noreferrer">{"Start Shopping & Save"}</a>
           )}
+
+          <div className="sec-h">Find Tax-Free Locations</div>
+          <button type="button" className="mapprev" onClick={() => setScreen("locations")} aria-label="View locations on map">
+            <span className="mapprev-map"><MapView home={homeOpt} all={all} radiusMi={radius} reroute={reroute} recoKey={reroute && bestAlt ? bestAlt.name + (bestAlt.zip || "") : ""} /></span>
+            <span className="mapprev-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M12 21s6-5.7 6-10.5A6 6 0 0 0 6 10.5C6 15.3 12 21 12 21Z" /><circle cx="12" cy="10.3" r="2" /></svg>View on Map →</span>
+          </button>
 
           <div className="hiw-h">How It Works</div>
           <div className="hiw">
