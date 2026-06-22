@@ -1,0 +1,12 @@
+{
+  "appId": "com.salestaxsaver.app",
+  "appName": "Sales Tax Saver",
+  "webDir": "dist",
+  "backgroundColor": "#F1F5F3",
+  "ios": {
+    "contentInset": "always"
+  },
+  "android": {
+    "backgroundColor": "#F1F5F3"
+  }
+}

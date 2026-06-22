@@ -424,9 +424,9 @@ export default function Landed() {
   const [pickInput, setPickInput] = useState("");
   const [pickErr, setPickErr] = useState("");
   const [userPoints, setUserPoints] = usePersistentState("sts:pickups", []);
-  const [price, setPrice] = useState(1500);
-  const [categoryId, setCategoryId] = useState("general");
-  const [freeShip, setFreeShip] = useState(true);
+  const [price, setPrice] = usePersistentState("sts:price", 1500);
+  const [categoryId, setCategoryId] = usePersistentState("sts:category", "general");
+  const [freeShip, setFreeShip] = usePersistentState("sts:freeShip", true);
   const [costPerMile, setCostPerMile] = usePersistentState("sts:costPerMile", 0.4);
   const [timeValue, setTimeValue] = usePersistentState("sts:timeValue", 20);
   const [minSavings, setMinSavings] = usePersistentState("sts:minSavings", 20);
