@@ -491,6 +491,7 @@ export default function Landed() {
   const [calcAmt, setCalcAmt] = useState(1000);
   const [view, setView] = useState("map");
   const [mapFilter, setMapFilter] = useState("all"); // Locations filter: all | best | 50 | 100
+  const [searched, setSearched] = useState(false);   // Home: false = Find form, true = Best Option result
   const [tab, setTab] = useState("router"); // top-level tab: "router" | "map"
   const [screen, setScreen] = useState("home"); // bottom nav: home | locations | savings | profile
   const [option, setOption] = useState(null);   // chosen fulfillment: "store" | "deliver" | null (=use recommendation)
@@ -1187,6 +1188,14 @@ export default function Landed() {
         .cmprow b{font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;color:var(--ink);}
         .cmprow span{display:block;font-size:11.5px;color:var(--muted);margin-top:2px;}
         .cmprow-amt{flex:none;font-weight:800;color:var(--go-d);font-size:13.5px;white-space:nowrap;}
+        .rhero{background:linear-gradient(135deg,#1FA254,#0B7F88);color:#fff;border-radius:18px;padding:20px 18px;text-align:center;box-shadow:0 16px 34px -18px rgba(11,127,136,.6);}
+        .rhero.alt{background:linear-gradient(135deg,#3F7CC4,#5B5FD0);}
+        .rhero-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,.2);border-radius:999px;padding:4px 12px;font-family:'Archivo',sans-serif;font-size:10.5px;font-weight:800;letter-spacing:.06em;}
+        .rhero-t{font-family:'Archivo',sans-serif;font-size:21px;font-weight:800;margin-top:11px;letter-spacing:-.01em;}
+        .rhero-k{font-size:12px;opacity:.85;margin-top:12px;}
+        .rhero-big{font-family:'Archivo',sans-serif;font-size:42px;font-weight:800;letter-spacing:-.02em;line-height:1;margin-top:2px;}
+        .rhero-sub{font-size:12px;opacity:.85;margin-top:6px;}
+        .zip-loc{flex:none;border:none;background:transparent;font-size:16px;cursor:pointer;padding:0 2px;line-height:1;}
         .optgroup{display:flex;flex-direction:column;gap:10px;}
         .optcard{display:flex;align-items:center;gap:13px;width:100%;text-align:left;background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:14px;cursor:pointer;}
         .optcard[data-on=true]{border-color:var(--go);background:var(--go-soft);}
@@ -1393,62 +1402,66 @@ export default function Landed() {
           );
         })()}
 
-        {!detail && screen === "home" && (<>
+        {!detail && screen === "home" && (searched ? (<>
+          {reroute && bestAlt ? (
+            <div className="rhero">
+              <div className="rhero-badge"><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M5 4h14v2h2v2a4 4 0 0 1-4 4h-.4A5 5 0 0 1 13 14.9V17h3v2H8v-2h3v-2.1A5 5 0 0 1 7.4 12H7a4 4 0 0 1-4-4V6h2V4zm0 4v0a2 2 0 0 0 2 2V6H5v2zm14 0V6h-2v4a2 2 0 0 0 2-2z" /></svg> BEST DEAL</div>
+              <div className="rhero-t">Pickup nearby wins</div>
+              <div className="rhero-k">You save</div>
+              <div className="rhero-big">{money(savings)}</div>
+              <div className="rhero-sub">after tax, gas &amp; time</div>
+            </div>
+          ) : (
+            <div className="rhero alt">
+              <div className="rhero-t">{homeFree ? `${homeGeo.city || "Your area"} is tax-free` : "Deliver to home"}</div>
+              <div className="rhero-k">{homeFree ? "Sales tax" : "Estimated sales tax"}</div>
+              <div className="rhero-big">{money(homeOpt.tax)}</div>
+              <div className="rhero-sub">{homeFree ? "no sales tax to pay" : noAlt ? `nothing within ${radius} mi beats it` : belowBar ? `a pickup saves only ${money(savings)} — under your $${minSavings} bar` : "the cheapest realistic option"}</div>
+            </div>
+          )}
+
+          {reroute && bestAlt && (
+            <div className="card">
+              <div className="hs-title">Why pickup nearby is better</div>
+              <div className="hs-row"><span>Sales tax saved</span><b style={{ color: "var(--go)" }}>+{money(gross)}</b></div>
+              <div className="hs-row"><span>Drive + time ({bestAlt.rtMiles} mi round trip)</span><b>−{money(gross - savings)}</b></div>
+              <div className="hs-net"><span>You save</span><b style={{ color: "var(--go)" }}>+{money(savings)}</b></div>
+            </div>
+          )}
+
+          {reroute && bestAlt && (
+            <button type="button" className="locrow" onClick={() => setDetail(bestAlt)} aria-label={`${bestAlt.name} — view details`}>
+              <span className="locrow-ic" data-free={bestAlt.taxFree} aria-hidden="true">%</span>
+              <span className="locrow-b">
+                <span className="locrow-t">{bestAlt.name}</span>
+                <span className="locrow-meta"><span>{bestAlt.miles} mi away</span><span>{bestAlt.taxFree ? "No sales tax" : pct(bestAlt.combinedRate)}</span></span>
+              </span>
+              <span className="locrow-arrow">›</span>
+            </button>
+          )}
+
+          {reroute && bestAlt ? (<>
+            <a className="cta" href={dirURL} target="_blank" rel="noopener noreferrer" onClick={() => logSaving(bestAlt.name.split(/[,·]/)[0].trim(), savings)}><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style={{ marginRight: 8 }} aria-hidden="true"><path d="M21.4 11.3 3.6 3.4c-.7-.3-1.4.4-1.1 1.1l2.9 6.6c.1.3.1.5 0 .8l-2.9 6.6c-.3.7.4 1.4 1.1 1.1l17.8-7.9c.7-.3.7-1.2 0-1.4z" /></svg>Show route</a>
+            <a className="cta sec" href={findStoresURL} target="_blank" rel="noopener noreferrer">Find stores near the pickup</a>
+          </>) : (
+            <a className="cta" href={shopURL} target="_blank" rel="noopener noreferrer">Shop online</a>
+          )}
+          <button type="button" className="link center" onClick={() => setSearched(false)}>‹ Try another search</button>
+
+          <div className="sec-h">Nearby options</div>
+          <button type="button" className="mapprev" onClick={() => setScreen("locations")} aria-label="View locations on map">
+            <span className="mapprev-map"><MapView home={homeOpt} all={all} radiusMi={radius} reroute={reroute} recoKey={reroute && bestAlt ? bestAlt.name + (bestAlt.zip || "") : ""} /></span>
+            <span className="mapprev-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M12 21s6-5.7 6-10.5A6 6 0 0 0 6 10.5C6 15.3 12 21 12 21Z" /><circle cx="12" cy="10.3" r="2" /></svg>View on Map →</span>
+          </button>
+        </>) : (<>
           <section className="banner">
             <span className="banner-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0l-7-7V4h9.6l7.4 7.4a2 2 0 0 1 0 2.8Z" /><circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none" /></svg></span>
-            <div><h2>Save on Sales Tax</h2><p>Shop in tax-free locations or get it delivered to save.</p></div>
+            <div><h2>Save on Sales Tax</h2><p>Find the lowest total cost wherever you buy.</p></div>
           </section>
 
-          <div className="acwrap">
-            <span className="search">
-              <svg className="search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.2-3.2" /></svg>
-              <input className="search-in" value={zipInput} placeholder="Search city, state or zip code" aria-label="Home ZIP or city" autoComplete="off"
-                onChange={onZipChange} onKeyDown={onZipKey}
-                onFocus={() => { ensurePlaces(); if (sug.length) setShowSug(true); }}
-                onBlur={() => setTimeout(() => setShowSug(false), 150)} />
-            </span>
-            {showSug && sug.length > 0 && (
-              <div className="aclist" role="listbox">
-                {sug.map((s, i) => (
-                  <button key={s.zip + s.st + i} type="button" role="option" aria-selected={i === sugIdx} className="acitem" data-on={i === sugIdx}
-                    onMouseDown={(e) => { e.preventDefault(); pickPlace(s); }} onMouseEnter={() => setSugIdx(i)}>
-                    <span className="acname">{s.name}</span><span className="acst">{s.st}</span><span className="aczip num">{s.zip}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="locline">
-            <span><b>{homeGeo.label}</b> · {homeFree ? "No sales tax" : "rate " + pct(homeRate.stateRate + homeRate.surtax)}
-              {!homeFree && !homeRate.precise && <span className="badge est">est</span>}</span>
-            <button type="button" className="link" disabled={resolving} onClick={() => locateMe(true)}>{resolving ? "Locating…" : "📍 My location"}</button>
-          </div>
-          {geoErr && <div className="errline">{geoErr}</div>}
-
-          <div className="sec-h">Choose an Option</div>
-          <div className="optgroup">
-            <button type="button" className="optcard" data-on={chosen === "store"} aria-pressed={chosen === "store"} onClick={() => setOption("store")}>
-              <span className="optcard-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round"><path d="M4.5 9.5 5.7 4.5h12.6l1.2 5M4.5 9.5h15M5 9.5v9.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5M4.5 9.5a2.4 2.4 0 0 0 4.9 0 2.4 2.4 0 0 0 4.9 0 2.4 2.4 0 0 0 4.7 0" /></svg></span>
-              <span className="optcard-b">
-                <span className="optcard-t">Shop in Store</span>
-                <span className="optcard-d">Pick up in a tax-free or lower-tax location to save on sales tax.</span>
-                {recommended === "store" && <span className="optcard-badge">SAVE TAX</span>}
-              </span>
-              <span className="optgo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg></span>
-            </button>
-            <button type="button" className="optcard" data-on={chosen === "deliver"} aria-pressed={chosen === "deliver"} onClick={() => setOption("deliver")}>
-              <span className="optcard-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round"><path d="M3.5 11 12 4l8.5 7M5.5 9.6V20h13V9.6M9.7 20v-5.4h4.6V20" /></svg></span>
-              <span className="optcard-b">
-                <span className="optcard-t">Deliver to Home</span>
-                <span className="optcard-d">Sales tax will apply based on your delivery address.</span>
-                {recommended === "deliver" && <span className="optcard-badge">BEST</span>}
-              </span>
-              <span className="optgo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg></span>
-            </button>
-          </div>
-
-          <div className="sec-h">Your Purchase</div>
+          <div className="sec-h">Find Your Best Option</div>
           <div className="card">
+            <div className="hint">We compare delivery, pickup, and nearby lower-tax locations.</div>
             <div className="fld">
               <div className="lab"><span>Item price</span><span className="num">{money(price)}</span></div>
               <input type="number" value={price} min={0} step={10} aria-label="Item price in dollars" onChange={(e) => setPrice(Math.max(0, Number(e.target.value) || 0))} />
@@ -1458,39 +1471,44 @@ export default function Landed() {
               <div className="lab"><span>Category</span></div>
               <div className="cats">{CATEGORIES.map((c) => <button key={c.id} type="button" className="cat" data-on={categoryId === c.id} aria-pressed={categoryId === c.id} onClick={() => setCategoryId(c.id)}>{c.l}</button>)}</div>
             </div>
-            <button type="button" className="tog" role="switch" aria-checked={freeShip} aria-label="Free shipping" onClick={() => setFreeShip((v) => !v)}><span>Free shipping</span><span className="switch" data-on={freeShip}><i /></span></button>
+            <div className="fld">
+              <div className="lab"><span>Your ZIP code</span></div>
+              <div className="acwrap">
+                <span className="search">
+                  <svg className="search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.2-3.2" /></svg>
+                  <input className="search-in" value={zipInput} placeholder="ZIP or city" aria-label="Home ZIP or city" autoComplete="off"
+                    onChange={onZipChange} onKeyDown={onZipKey}
+                    onFocus={() => { ensurePlaces(); if (sug.length) setShowSug(true); }}
+                    onBlur={() => setTimeout(() => setShowSug(false), 150)} />
+                  <button type="button" className="zip-loc" disabled={resolving} onClick={() => locateMe(true)} aria-label="Use my location">📍</button>
+                </span>
+                {showSug && sug.length > 0 && (
+                  <div className="aclist" role="listbox">
+                    {sug.map((s, i) => (
+                      <button key={s.zip + s.st + i} type="button" role="option" aria-selected={i === sugIdx} className="acitem" data-on={i === sugIdx}
+                        onMouseDown={(e) => { e.preventDefault(); pickPlace(s); }} onMouseEnter={() => setSugIdx(i)}>
+                        <span className="acname">{s.name}</span><span className="acst">{s.st}</span><span className="aczip num">{s.zip}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="locline"><span><b>{homeGeo.label}</b> · {homeFree ? "No sales tax" : "rate " + pct(homeRate.stateRate + homeRate.surtax)}{!homeFree && !homeRate.precise && <span className="badge est">est</span>}</span></div>
+              {geoErr && <div className="errline">{geoErr}</div>}
+            </div>
+            <button type="button" className="tog" role="switch" aria-checked={freeShip} aria-label="Include free shipping" onClick={() => setFreeShip((v) => !v)}><span>Include free shipping</span><span className="switch" data-on={freeShip}><i /></span></button>
           </div>
-
-          <div className="sec-h">Potential Savings</div>
-          <div className="savecard" data-save={youCouldSave > 0}>
-            <div><div className="save-k">You could save</div><div className="save-v big" style={{ color: youCouldSave > 0 ? undefined : "var(--muted)" }}>{money(youCouldSave)}</div><div className="save-sub">Estimated tax savings</div></div>
-            <div><div className="save-k">Estimated tax</div><div className="save-v alt">{money(chosenTax)}</div><div className="save-sub">{chosen === "store" && chosenTax < homeTax ? "Instead of " + money(homeTax) : "On a " + money(price) + " item"}</div></div>
-          </div>
-
-          {chosen === "store" && storeWorthIt ? (<>
-            <a className="cta" href={dirURL} target="_blank" rel="noopener noreferrer" aria-label="Start shopping — open driving directions to the pickup in Google Maps" onClick={() => logSaving(bestAlt.name.split(/[,·]/)[0].trim(), youCouldSave)}>{"Start Shopping & Save"}</a>
-            <a className="cta sec" href={findStoresURL} target="_blank" rel="noopener noreferrer">Find stores near the pickup</a>
-          </>) : chosen === "store" ? (<>
-            <div className="notice">{storeNudge}</div>
-            <button type="button" className="cta" onClick={() => setOption("deliver")}>Deliver to Home instead</button>
-          </>) : (
-            <a className="cta" href={shopURL} target="_blank" rel="noopener noreferrer">{"Start Shopping & Save"}</a>
-          )}
-
-          <div className="sec-h">Find Tax-Free Locations</div>
-          <button type="button" className="mapprev" onClick={() => setScreen("locations")} aria-label="View locations on map">
-            <span className="mapprev-map"><MapView home={homeOpt} all={all} radiusMi={radius} reroute={reroute} recoKey={reroute && bestAlt ? bestAlt.name + (bestAlt.zip || "") : ""} /></span>
-            <span className="mapprev-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M12 21s6-5.7 6-10.5A6 6 0 0 0 6 10.5C6 15.3 12 21 12 21Z" /><circle cx="12" cy="10.3" r="2" /></svg>View on Map →</span>
-          </button>
+          <button type="button" className="cta" onClick={() => { locate(zipInput); setSearched(true); }}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" style={{ marginRight: 8 }} aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.2-3.2" /></svg>Find Best Savings</button>
+          <div className="dt-note">We factor in sales tax, drive cost, and your time to find real savings.</div>
 
           <div className="hiw-h">How It Works</div>
           <div className="hiw">
-            <div className="hiw-step"><span className="hiw-n">1</span><span className="hiw-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M12 21s6-5.7 6-10.5A6 6 0 0 0 6 10.5C6 15.3 12 21 12 21Z" /><circle cx="12" cy="10.3" r="2" /></svg></span><b>Find tax-free spots</b><span>States &amp; towns with no sales tax.</span></div>
-            <div className="hiw-step"><span className="hiw-n">2</span><span className="hiw-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M6 8h12l-1 12H7L6 8z" /><path d="M9 8a3 3 0 0 1 6 0" /></svg></span><b>Shop &amp; save</b><span>Pick up in store, skip the tax.</span></div>
-            <div className="hiw-step"><span className="hiw-n">3</span><span className="hiw-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M8.5 12.5l2.5 2.5 4.5-5" /></svg></span><b>Keep more money</b><span>Save instantly on every buy.</span></div>
+            <div className="hiw-step"><span className="hiw-n">1</span><span className="hiw-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M12 21s6-5.7 6-10.5A6 6 0 0 0 6 10.5C6 15.3 12 21 12 21Z" /><circle cx="12" cy="10.3" r="2" /></svg></span><b>Enter your item</b><span>Price, category, and your ZIP.</span></div>
+            <div className="hiw-step"><span className="hiw-n">2</span><span className="hiw-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.2-3.2" /></svg></span><b>Find best savings</b><span>We compare delivery vs pickup.</span></div>
+            <div className="hiw-step"><span className="hiw-n">3</span><span className="hiw-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M8.5 12.5l2.5 2.5 4.5-5" /></svg></span><b>Keep more money</b><span>Net of gas + your time.</span></div>
             <div className="hiw-step"><span className="hiw-n">4</span><span className="hiw-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M3 7h15a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" /><path d="M3 7l2-3h11l2 3" /><circle cx="16" cy="13" r="1.4" fill="currentColor" stroke="none" /></svg></span><b>Bigger = better</b><span>Pricier items save more.</span></div>
           </div>
-        </>)}
+        </>))}
 
         {!detail && screen === "locations" && (<>
           <div className="seg2">
