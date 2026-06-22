@@ -248,7 +248,14 @@ async function proxyLookup(f, zip) {
 const offlineProvider = {
   name: "offline",
   async geocode(query) { return resolvePlace(query); },
-  async getRate(geo) { return geo ? withSource(rateFor(geo), "offline") : null; },
+  async getRate(geo) {
+    if (!geo) return null;
+    if (geo.zip && geo.state !== "FL" && !NOMAD.has(geo.state)) {
+      const county = await countyRateForZip(geo.zip); // exact per-county rate when we can resolve the ZIP
+      if (county) return withSource(county, "offline");
+    }
+    return withSource(rateFor(geo), "offline");
+  },
   async getRates(geos) { return geos.map((g) => (g ? withSource(rateFor(g), "offline") : null)); },
   async reverseGeocode(lat, lng) { return nearestPlace(lat, lng); },
 };
@@ -347,6 +354,24 @@ function loadPlaces() {
     .then((a) => a.map(([name, st, zip, lat, lng]) => ({ name, st, zip, lat, lng })))
     .catch(() => []);
   return _placesPromise;
+}
+
+let _countyRatePromise = null;
+// Lazy-load ZIP→county-FIPS + per-county combined rates so any ZIP resolves to its EXACT county rate (not just a state average).
+function loadCountyRates() {
+  if (!_countyRatePromise) _countyRatePromise = Promise.all([
+    fetch(BASE + "zip-fips.json").then((r) => (r.ok ? r.json() : {})),
+    fetch(BASE + "county-rates.json").then((r) => (r.ok ? r.json() : {})),
+  ]).then(([zipFips, rates]) => ({ zipFips, rates })).catch(() => ({ zipFips: {}, rates: {} }));
+  return _countyRatePromise;
+}
+// A ZIP's exact county combined rate (TaxJar ~2025), shaped like rateFor's result, or null if the ZIP/county is unknown.
+async function countyRateForZip(zip) {
+  if (!zip) return null;
+  const { zipFips, rates } = await loadCountyRates();
+  const fips = zipFips[zip];
+  const r = fips != null ? rates[fips] : null;
+  return r == null ? null : { stateRate: r, surtax: 0, cap: null, precise: true, note: "county rate" };
 }
 
 // Tween a number toward its target with rAF (ease-out cubic) so the verdict figure visibly reacts to input
@@ -1542,7 +1567,7 @@ export default function Landed() {
 
           <details className="foot">
             <summary>Data sources & accuracy · not tax advice</summary>
-            <p>Florida is exact per county and the 0% no-tax states are exact. Elsewhere we show a population-weighted <b>combined</b> average (state + typical local), flagged <i>est</i> — connect a rooftop tax API for the exact local rate at an address. Distances and routes are estimates. Not tax advice.</p>
+            <p>Your home rate uses <b>per-county</b> combined rates (~2025) for ~40k ZIPs nationwide, plus exact Florida county surtaxes and the 0% no-tax states; where a ZIP can't be matched we fall back to a state average (flagged <i>est</i>). Nearby-area candidate rates are still state-level estimates. A rooftop tax API gives the exact rate at a specific address. Distances and routes are estimates. Not tax advice.</p>
           </details>
         </>)}
 
