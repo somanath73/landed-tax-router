@@ -493,7 +493,7 @@ export default function Landed() {
   const [calcAmt, setCalcAmt] = useState(1000);
   const [view, setView] = useState("map");
   const [mapFilter, setMapFilter] = useState("all"); // Locations filter: all | best | 50 | 100
-  const [searched, setSearched] = useState(false);   // Home: false = Find form, true = Best Option result
+  const [searched, setSearched] = useState(false);   // Home: form is always shown; true reveals the result below it
   const [cmpInline, setCmpInline] = useState(false);     // inline compare breakdown on the Home result
   const [shared, setShared] = useState("");              // brief feedback after a Share with friends tap
   const [tab, setTab] = useState("router"); // top-level tab: "router" | "map"
@@ -874,7 +874,7 @@ export default function Landed() {
             </div>
           );
         })}
-        <div className="dt-note">Totals include sales tax, shipping, and (for pickups) gas + your time. Not tax advice.</div>
+        <div className="dt-note">Totals include sales tax, shipping, and (for pickups) gas + your time. Assumes the same item price online and in stores. Not tax advice.</div>
       </>
     );
   };
@@ -1481,64 +1481,7 @@ export default function Landed() {
           );
         })()}
 
-        {!detail && screen === "home" && (searched ? (<>
-          {reroute && bestAlt ? (
-            <div className="rhero">
-              <div className="rhero-badge"><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M5 4h14v2h2v2a4 4 0 0 1-4 4h-.4A5 5 0 0 1 13 14.9V17h3v2H8v-2h3v-2.1A5 5 0 0 1 7.4 12H7a4 4 0 0 1-4-4V6h2V4zm0 4v0a2 2 0 0 0 2 2V6H5v2zm14 0V6h-2v4a2 2 0 0 0 2-2z" /></svg> BEST DEAL</div>
-              <div className="rhero-t">Pickup nearby wins</div>
-              <div className="rhero-k">You save</div>
-              <div className="rhero-big">{money(savings)}</div>
-              <div className="rhero-sub">after tax, gas &amp; time</div>
-            </div>
-          ) : (
-            <div className="rhero alt">
-              <div className="rhero-t">{homeFree ? `${homeGeo.city || "Your area"} is tax-free` : "Deliver to home"}</div>
-              <div className="rhero-k">{homeFree ? "Sales tax" : "Estimated sales tax"}</div>
-              <div className="rhero-big">{money(homeOpt.tax)}</div>
-              <div className="rhero-sub">{homeFree ? "no sales tax to pay" : noAlt ? `nothing within ${radius} mi beats it` : belowBar ? `a pickup saves only ${money(savings)} — under your $${minSavings} bar` : "the cheapest realistic option"}</div>
-            </div>
-          )}
-
-          {reroute && bestAlt && (
-            <div className="card">
-              <div className="hs-title">Why pickup nearby is better</div>
-              <div className="hs-row"><span>Sales tax saved</span><b style={{ color: "var(--go)" }}>+{money(gross)}</b></div>
-              <div className="hs-row"><span>Drive + time ({bestAlt.rtMiles} mi round trip)</span><b>−{money(gross - savings)}</b></div>
-              <div className="hs-net"><span>You save</span><b style={{ color: "var(--go)" }}>+{money(savings)}</b></div>
-            </div>
-          )}
-
-          {reroute && bestAlt && (
-            <button type="button" className="locrow" onClick={() => setDetail(bestAlt)} aria-label={`${bestAlt.name} — view details`}>
-              <span className="locrow-ic" data-free={bestAlt.taxFree} aria-hidden="true">%</span>
-              <span className="locrow-b">
-                <span className="locrow-t">{bestAlt.name}</span>
-                <span className="locrow-meta"><span>{bestAlt.miles} mi away</span><span>{bestAlt.taxFree ? "No sales tax" : pct(bestAlt.combinedRate)}</span></span>
-              </span>
-              <span className="locrow-arrow">›</span>
-            </button>
-          )}
-
-          {reroute && bestAlt ? (<>
-            <a className="cta" href={dirURL} target="_blank" rel="noopener noreferrer" onClick={() => logSaving(bestAlt.name.split(/[,·]/)[0].trim(), savings)}><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style={{ marginRight: 8 }} aria-hidden="true"><path d="M21.4 11.3 3.6 3.4c-.7-.3-1.4.4-1.1 1.1l2.9 6.6c.1.3.1.5 0 .8l-2.9 6.6c-.3.7.4 1.4 1.1 1.1l17.8-7.9c.7-.3.7-1.2 0-1.4z" /></svg>Show route</a>
-            <a className="cta sec" href={findStoresURL} target="_blank" rel="noopener noreferrer">Find stores near the pickup</a>
-          </>) : (
-            <a className="cta" href={shopURL} target="_blank" rel="noopener noreferrer">Shop online</a>
-          )}
-          {bestAlt && (
-            <button type="button" className="cta sec" aria-expanded={cmpInline} onClick={() => setCmpInline((v) => !v)}>
-              {cmpInline ? "Hide comparison" : "Compare all options"}
-            </button>
-          )}
-          {bestAlt && cmpInline && renderCompare(() => { setCmpInline(false); setSearched(false); })}
-          <button type="button" className="link center" onClick={() => { setCmpInline(false); setSearched(false); }}>‹ Try another search</button>
-
-          <div className="sec-h">Nearby options</div>
-          <button type="button" className="mapprev" onClick={() => setScreen("locations")} aria-label="View locations on map">
-            <span className="mapprev-map"><MapView home={homeOpt} all={all} radiusMi={radius} reroute={reroute} recoKey={reroute && bestAlt ? bestAlt.name + (bestAlt.zip || "") : ""} /></span>
-            <span className="mapprev-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M12 21s6-5.7 6-10.5A6 6 0 0 0 6 10.5C6 15.3 12 21 12 21Z" /><circle cx="12" cy="10.3" r="2" /></svg>View on Map →</span>
-          </button>
-        </>) : (<>
+        {!detail && screen === "home" && (<>
           <section className="banner">
             <span className="banner-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0l-7-7V4h9.6l7.4 7.4a2 2 0 0 1 0 2.8Z" /><circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none" /></svg></span>
             <div><h2>Save on Sales Tax</h2><p>Find the lowest total cost wherever you buy.</p></div>
@@ -1583,9 +1526,68 @@ export default function Landed() {
             </div>
             <button type="button" className="tog" role="switch" aria-checked={freeShip} aria-label="Include free shipping" onClick={() => setFreeShip((v) => !v)}><span>Include free shipping</span><span className="switch" data-on={freeShip}><i /></span></button>
           </div>
-          <button type="button" className="cta" onClick={() => { locate(zipInput); setCmpInline(false); setSearched(true); }}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" style={{ marginRight: 8 }} aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.2-3.2" /></svg>Find Best Savings</button>
-          <div className="dt-note">We factor in sales tax, drive cost, and your time to find real savings.</div>
-        </>))}
+          <button type="button" className="cta" onClick={() => { locate(zipInput); setCmpInline(false); setSearched(true); }}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" style={{ marginRight: 8 }} aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.2-3.2" /></svg>{searched ? "Update results" : "Find Best Savings"}</button>
+          <div className="dt-note">We factor in sales tax, drive cost, and your time to find real savings — assuming the same item price online and in stores.</div>
+
+          {searched && (<>
+            <div className="sec-h">Your best option</div>
+            {reroute && bestAlt ? (
+              <div className="rhero">
+                <div className="rhero-badge"><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M5 4h14v2h2v2a4 4 0 0 1-4 4h-.4A5 5 0 0 1 13 14.9V17h3v2H8v-2h3v-2.1A5 5 0 0 1 7.4 12H7a4 4 0 0 1-4-4V6h2V4zm0 4v0a2 2 0 0 0 2 2V6H5v2zm14 0V6h-2v4a2 2 0 0 0 2-2z" /></svg> BEST DEAL</div>
+                <div className="rhero-t">Pickup nearby wins</div>
+                <div className="rhero-k">You save</div>
+                <div className="rhero-big">{money(savings)}</div>
+                <div className="rhero-sub">after tax, gas &amp; time</div>
+              </div>
+            ) : (
+              <div className="rhero alt">
+                <div className="rhero-t">{homeFree ? `${homeGeo.city || "Your area"} is tax-free` : "Deliver to home"}</div>
+                <div className="rhero-k">{homeFree ? "Sales tax" : "Estimated sales tax"}</div>
+                <div className="rhero-big">{money(homeOpt.tax)}</div>
+                <div className="rhero-sub">{homeFree ? "no sales tax to pay" : noAlt ? `nothing within ${radius} mi beats it` : belowBar ? `a pickup saves only ${money(savings)} — under your $${minSavings} bar` : "the cheapest realistic option"}</div>
+              </div>
+            )}
+
+            {reroute && bestAlt && (
+              <div className="card">
+                <div className="hs-title">Why pickup nearby is better</div>
+                <div className="hs-row"><span>Sales tax saved</span><b style={{ color: "var(--go)" }}>+{money(gross)}</b></div>
+                <div className="hs-row"><span>Drive + time ({bestAlt.rtMiles} mi round trip)</span><b>−{money(gross - savings)}</b></div>
+                <div className="hs-net"><span>You save</span><b style={{ color: "var(--go)" }}>+{money(savings)}</b></div>
+              </div>
+            )}
+
+            {reroute && bestAlt && (
+              <button type="button" className="locrow" onClick={() => setDetail(bestAlt)} aria-label={`${bestAlt.name} — view details`}>
+                <span className="locrow-ic" data-free={bestAlt.taxFree} aria-hidden="true">%</span>
+                <span className="locrow-b">
+                  <span className="locrow-t">{bestAlt.name}</span>
+                  <span className="locrow-meta"><span>{bestAlt.miles} mi away</span><span>{bestAlt.taxFree ? "No sales tax" : pct(bestAlt.combinedRate)}</span></span>
+                </span>
+                <span className="locrow-arrow">›</span>
+              </button>
+            )}
+
+            {reroute && bestAlt ? (<>
+              <a className="cta" href={dirURL} target="_blank" rel="noopener noreferrer" onClick={() => logSaving(bestAlt.name.split(/[,·]/)[0].trim(), savings)}><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style={{ marginRight: 8 }} aria-hidden="true"><path d="M21.4 11.3 3.6 3.4c-.7-.3-1.4.4-1.1 1.1l2.9 6.6c.1.3.1.5 0 .8l-2.9 6.6c-.3.7.4 1.4 1.1 1.1l17.8-7.9c.7-.3.7-1.2 0-1.4z" /></svg>Show route</a>
+              <a className="cta sec" href={findStoresURL} target="_blank" rel="noopener noreferrer">Find stores near the pickup</a>
+            </>) : (
+              <a className="cta" href={shopURL} target="_blank" rel="noopener noreferrer">Shop online</a>
+            )}
+            {bestAlt && (
+              <button type="button" className="cta sec" aria-expanded={cmpInline} onClick={() => setCmpInline((v) => !v)}>
+                {cmpInline ? "Hide comparison" : "Compare all options"}
+              </button>
+            )}
+            {bestAlt && cmpInline && renderCompare(() => setCmpInline(false))}
+
+            <div className="sec-h">Nearby options</div>
+            <button type="button" className="mapprev" onClick={() => setScreen("locations")} aria-label="View locations on map">
+              <span className="mapprev-map"><MapView home={homeOpt} all={all} radiusMi={radius} reroute={reroute} recoKey={reroute && bestAlt ? bestAlt.name + (bestAlt.zip || "") : ""} /></span>
+              <span className="mapprev-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M12 21s6-5.7 6-10.5A6 6 0 0 0 6 10.5C6 15.3 12 21 12 21Z" /><circle cx="12" cy="10.3" r="2" /></svg>View on Map →</span>
+            </button>
+          </>)}
+        </>)}
 
         {!detail && screen ==="locations" && (<>
           <div className="seg2">
