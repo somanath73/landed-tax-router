@@ -442,6 +442,66 @@ const DONATE_URL = "https://www.buymeacoffee.com/somanath73";
 // Public home of the live app — used by the "Share with friends" action.
 const APP_URL = "https://somanath73.github.io/landed-tax-router/";
 
+// --- iOS in-app tip jar -----------------------------------------------------
+// Apple (Guideline 3.1.1) forbids the external "Buy Me a Coffee" link on iOS, so the
+// iOS build offers tips via StoreKit IAP instead; web + Android keep Buy Me a Coffee.
+// SETUP on a Mac before the iOS build (see MOBILE.md):
+//   1) In App Store Connect, create three CONSUMABLE products with these exact IDs + prices.
+//   2) In RevenueCat, add the iOS app + these products, then paste your iOS public SDK key below.
+//   3) `npx cap sync ios` installs the RevenueCat pod. Test in the sandbox on a real device.
+// Until the key is set, the tip buttons show a friendly "coming soon" and ship nothing on iOS.
+const IS_IOS = Capacitor.getPlatform() === "ios";
+const REVENUECAT_IOS_API_KEY = ""; // TODO: paste your RevenueCat iOS public SDK key (starts with "appl_")
+const TIP_TIERS = [
+  { id: "com.salestaxsaver.tip.small", label: "$1.99" },
+  { id: "com.salestaxsaver.tip.medium", label: "$4.99" },
+  { id: "com.salestaxsaver.tip.large", label: "$9.99" },
+];
+let rcConfigured = false; // configure RevenueCat once per session
+async function purchaseTip(productId, setMsg) {
+  if (!REVENUECAT_IOS_API_KEY) { setMsg("Tips coming soon — thank you!"); return; }
+  try {
+    setMsg("Opening…");
+    // Lazy import: this chunk is only ever fetched on iOS, never in the web/Android bundle.
+    const { Purchases } = await import("@revenuecat/purchases-capacitor");
+    if (!rcConfigured) { await Purchases.configure({ apiKey: REVENUECAT_IOS_API_KEY }); rcConfigured = true; }
+    const { products } = await Purchases.getProducts({ productIdentifiers: [productId] });
+    if (!products || !products.length) { setMsg("Tip unavailable right now."); return; }
+    await Purchases.purchaseStoreProduct({ product: products[0] });
+    setMsg("Thank you so much! 💚");
+  } catch (e) {
+    if (e && e.userCancelled) { setMsg(""); return; } // user backed out — not an error
+    setMsg("Couldn't complete the tip — please try again.");
+  }
+}
+
+// Renders the platform-correct support action: Buy Me a Coffee on web/Android, an IAP tip jar on iOS.
+function TipOrCoffee() {
+  const [msg, setMsg] = useState("");
+  if (!IS_IOS) {
+    return (
+      <a className="bmac" href={DONATE_URL} target="_blank" rel="noopener noreferrer">
+        <span className="bmac-cup" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8h12v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8Z" /><path d="M16 9h2.5a2.5 2.5 0 0 1 0 5H16" /><path d="M7 3.5c-.5.7-.5 1.3 0 2M11 3.5c-.5.7-.5 1.3 0 2" /></svg>
+        </span>
+        <span className="bmac-t">Buy Me a Coffee</span>
+      </a>
+    );
+  }
+  return (
+    <div className="tipjar">
+      <div className="tipjar-row">
+        {TIP_TIERS.map((t) => (
+          <button key={t.id} type="button" className="tipbtn" onClick={() => purchaseTip(t.id, setMsg)}>
+            <span aria-hidden="true">☕</span> {t.label}
+          </button>
+        ))}
+      </div>
+      <div className="tipjar-msg" aria-live="polite">{msg || "Leave a tip to support the app"}</div>
+    </div>
+  );
+}
+
 // State that persists to localStorage, so user settings stick until they change them again.
 const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } };
 function usePersistentState(key, initial) {
@@ -1234,6 +1294,12 @@ export default function Landed() {
         .bmac:active{transform:translateY(1px);}
         .bmac-cup{flex:none;display:grid;place-items:center;color:#B9831C;}
         .bmac-t{font-family:'Archivo',sans-serif;font-weight:800;font-size:16px;color:#5A4410;letter-spacing:-.01em;}
+        .tipjar{display:flex;flex-direction:column;gap:9px;}
+        .tipjar-row{display:flex;gap:8px;}
+        .tipbtn{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:4px;background:#FFF0C8;border:1px solid #EED699;border-radius:12px;padding:12px 4px;font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;color:#5A4410;cursor:pointer;}
+        .tipbtn:hover{background:#FFEBB8;}
+        .tipbtn:active{transform:translateY(1px);}
+        .tipjar-msg{font-size:12px;color:var(--sub);text-align:center;}
         .share{display:flex;align-items:center;gap:13px;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:13px 15px;cursor:pointer;box-shadow:0 1px 2px rgba(16,34,26,.04),0 16px 30px -26px rgba(16,34,26,.5);}
         .share:hover{border-color:#CFE6D8;}
         .share:active{transform:translateY(1px);}
@@ -1583,7 +1649,7 @@ export default function Landed() {
 
             <div className="sec-h">Nearby options</div>
             <button type="button" className="mapprev" onClick={() => setScreen("locations")} aria-label="View locations on map">
-              <span className="mapprev-map"><MapView home={homeOpt} all={all} radiusMi={radius} reroute={reroute} recoKey={reroute && bestAlt ? bestAlt.name + (bestAlt.zip || "") : ""} /></span>
+              <span className="mapprev-map"><MapView home={homeOpt} all={all} radiusMi={radius} reroute={reroute} recoKey={reroute && bestAlt ? bestAlt.name + (bestAlt.zip || "") + "@" + bestAlt.lat + "," + bestAlt.lng : ""} /></span>
               <span className="mapprev-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M12 21s6-5.7 6-10.5A6 6 0 0 0 6 10.5C6 15.3 12 21 12 21Z" /><circle cx="12" cy="10.3" r="2" /></svg>View on Map →</span>
             </button>
           </>)}
@@ -1623,7 +1689,7 @@ export default function Landed() {
           )}
 
           {view !== "ledger" && (
-            <div className="uswrap"><MapView home={homeOpt} all={[homeOpt, ...fcands]} radiusMi={radius} reroute={reroute} recoKey={reroute && bestAlt ? bestAlt.name + (bestAlt.zip || "") : ""} interactive onDetails={setDetail} /></div>
+            <div className="uswrap"><MapView home={homeOpt} all={[homeOpt, ...fcands]} radiusMi={radius} reroute={reroute} recoKey={reroute && bestAlt ? bestAlt.name + (bestAlt.zip || "") + "@" + bestAlt.lat + "," + bestAlt.lng : ""} interactive onDetails={setDetail} /></div>
           )}
 
           <div className="sec-h">Nearby Tax-Free Locations</div>
@@ -1635,7 +1701,7 @@ export default function Landed() {
             ) : fcands.map((c) => {
               const free = c.taxFree || c.combinedRate === 0;
               return (
-                <button key={c.name + (c.zip || "")} type="button" className="locrow" onClick={() => setDetail(c)} aria-label={`${c.name} — ${free ? "no sales tax" : pct(c.combinedRate)}, ${c.miles} mi away. View details.`}>
+                <button key={c.name + (c.zip || "") + "@" + c.lat + "," + c.lng} type="button" className="locrow" onClick={() => setDetail(c)} aria-label={`${c.name} — ${free ? "no sales tax" : pct(c.combinedRate)}, ${c.miles} mi away. View details.`}>
                   <span className="locrow-ic" data-free={free} aria-hidden="true">%</span>
                   <span className="locrow-b">
                     <span className="locrow-t">{c.name}</span>
@@ -1774,12 +1840,7 @@ export default function Landed() {
                 <div className="supp-d">Tips keep Sales Tax Saver free and ad-free — thank you!</div>
               </div>
             </div>
-            <a className="bmac" href={DONATE_URL} target="_blank" rel="noopener noreferrer">
-              <span className="bmac-cup" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8h12v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8Z" /><path d="M16 9h2.5a2.5 2.5 0 0 1 0 5H16" /><path d="M7 3.5c-.5.7-.5 1.3 0 2M11 3.5c-.5.7-.5 1.3 0 2" /></svg>
-              </span>
-              <span className="bmac-t">Buy Me a Coffee</span>
-            </a>
+<TipOrCoffee />
           </div>
 
           <details className="foot">
@@ -1821,12 +1882,7 @@ export default function Landed() {
                 <div className="supp-d">Support us and help keep Sales Tax Saver free for everyone.</div>
               </div>
             </div>
-            <a className="bmac" href={DONATE_URL} target="_blank" rel="noopener noreferrer">
-              <span className="bmac-cup" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8h12v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8Z" /><path d="M16 9h2.5a2.5 2.5 0 0 1 0 5H16" /><path d="M7 3.5c-.5.7-.5 1.3 0 2M11 3.5c-.5.7-.5 1.3 0 2" /></svg>
-              </span>
-              <span className="bmac-t">Buy Me a Coffee</span>
-            </a>
+<TipOrCoffee />
           </div>
 
           <button type="button" className="share" onClick={shareApp} aria-label="Share Sales Tax Saver with friends">
@@ -2131,7 +2187,9 @@ function MapView({ home, all, radiusMi, reroute, recoKey, interactive = false, o
   const svgRef = useRef(null);
   const drag = useRef(null);
   const cands = all.filter((o) => o.tag !== "home");
-  const keyOf = (o) => o.name + (o.zip || "");
+  // Unique identity per point — name+zip alone collides for same-named counties (e.g. FL DeSoto/Desoto),
+  // so include the centroid. Used for React keys, hover focus, and recommended-pin matching.
+  const keyOf = (o) => o.name + (o.zip || "") + "@" + o.lat + "," + o.lng;
   useEffect(() => { setCam(null); }, [home.lat, home.lng, radiusMi]); // recenter when home or radius changes
 
   // Web-Mercator tile mosaic (keyless CARTO Voyager street tiles — Google-default-style basemap) with markers re-projected on top.
