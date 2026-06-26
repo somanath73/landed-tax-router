@@ -91,10 +91,10 @@ Sales Tax Saver provides estimates for general information only and is not tax, 
 savings,tax rate,calculator,shopping,pickup,delivery,zip,county,budget,deal,store,compare,gas
 ```
 
-**URLs**
-- Support URL: `https://somanath73.github.io/landed-tax-router/support.html`
-- Marketing URL (optional): `https://somanath73.github.io/landed-tax-router/`
-- Privacy Policy URL: `https://somanath73.github.io/landed-tax-router/privacy.html`
+**URLs** *(on the LLC domain — live once pixiy.dev DNS is configured; the github.io app URLs work as a fallback until then)*
+- Support URL: `https://pixiy.dev/sales-tax-saver/support.html`
+- Marketing URL (optional): `https://pixiy.dev/sales-tax-saver/`
+- Privacy Policy URL: `https://pixiy.dev/sales-tax-saver/privacy.html`
 
 **Category:** Primary **Finance** · Secondary **Shopping** (or Utilities)
 **Age rating:** complete the questionnaire → expected **4+** (no objectionable content).
