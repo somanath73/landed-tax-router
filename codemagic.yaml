@@ -1,0 +1,63 @@
+# Codemagic CI/CD — build, sign, and upload Sales Tax Saver (iOS) to TestFlight.
+# No Mac required: Codemagic builds on a macOS machine and signs via your
+# App Store Connect API key.  See SETUP-CODEMAGIC.md for the one-time setup.
+workflows:
+  ios-release:
+    name: Sales Tax Saver iOS
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    integrations:
+      # Must match the NAME you give the App Store Connect API-key integration
+      # in Codemagic (Team settings > Integrations > App Store Connect).
+      app_store_connect: pixiy_asc
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.salestaxsaver.app
+      vars:
+        XCODE_WORKSPACE: "ios/App/App.xcworkspace"
+        XCODE_SCHEME: "App"
+        # After you create the app record in App Store Connect, paste its
+        # numeric Apple ID here to auto-bump the build number each run:
+        # APP_STORE_APPLE_ID: 0000000000
+      node: 22
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Install npm dependencies
+        script: npm ci
+      - name: Build web assets (Vite, base "/")
+        script: npm run build
+      - name: Generate the iOS project + sync web/plugins
+        script: |
+          npx cap add ios || true
+          npx cap sync ios
+      - name: Configure Info.plist (location string + encryption compliance)
+        script: |
+          PLIST="ios/App/App/Info.plist"
+          LOC="Sales Tax Saver uses your location to find the local sales tax rate for your area."
+          /usr/libexec/PlistBuddy -c "Add :NSLocationWhenInUseUsageDescription string $LOC" "$PLIST" \
+            || /usr/libexec/PlistBuddy -c "Set :NSLocationWhenInUseUsageDescription $LOC" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" "$PLIST" \
+            || /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" "$PLIST"
+      - name: Add the privacy manifest to the app target
+        script: |
+          cp scripts/ios/PrivacyInfo.xcprivacy ios/App/App/PrivacyInfo.xcprivacy
+          gem install xcodeproj --no-document
+          ruby scripts/ios/add_privacy_manifest.rb
+      - name: Set marketing version 1.0.0
+        script: |
+          cd ios/App && agvtool new-marketing-version 1.0.0
+      - name: Apply automatic code signing
+        script: xcode-project use-profiles
+      - name: Build the signed IPA
+        script: |
+          xcode-project build-ipa --workspace "$XCODE_WORKSPACE" --scheme "$XCODE_SCHEME"
+    artifacts:
+      - ios/App/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true     # uploads to TestFlight for testing
+        submit_to_app_store: false     # flip to true when you're ready for public review
